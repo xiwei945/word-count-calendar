@@ -1,0 +1,185 @@
+/* 字数统计日历样式 */
+
+.word-count-calendar-container {
+	padding: 16px;
+	height: 100%;
+	overflow-y: auto;
+	font-family: var(--font-interface);
+
+	/* GitHub style colors - Light Mode Default */
+	--calendar-level-1: #9be9a8;
+	--calendar-level-2: #40c463;
+	--calendar-level-3: #30a14e;
+	--calendar-level-4: #216e39;
+
+}
+
+.theme-dark .word-count-calendar-container {
+	/* GitHub style colors - Dark Mode */
+	--calendar-level-1: #0e4429;
+	--calendar-level-2: #006d32;
+	--calendar-level-3: #26a641;
+	--calendar-level-4: #39d353;
+}
+
+/* 日历头部 */
+.calendar-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 24px;
+	padding: 0 4px;
+}
+
+.calendar-nav-btn {
+	background: transparent;
+	color: var(--text-muted);
+	border: 1px solid var(--background-modifier-border);
+	padding: 4px 12px;
+	border-radius: 6px;
+	cursor: pointer;
+	font-size: 16px;
+	font-weight: bold;
+	transition: all 0.2s ease;
+}
+
+.calendar-nav-btn:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+	border-color: var(--interactive-accent);
+}
+
+.calendar-month-display {
+	font-size: 1.2em;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+/* 日历网格 - 自适应布局 */
+.calendar-grid {
+	display: grid;
+	/* 使用 CSS 变量，默认值为 45px */
+	grid-template-columns: repeat(auto-fit, minmax(var(--calendar-cell-size, 45px), 1fr));
+	gap: 10px;
+	/* Increased gutter */
+	margin-bottom: 24px;
+	padding: 4px;
+}
+
+/* 单个日期格子 */
+.calendar-day {
+	aspect-ratio: 1;
+	background-color: var(--background-secondary);
+	/* 独立的边框，即使没内容也显示框框 */
+	border: 1px solid var(--background-modifier-border);
+	/* 轻微的内阴影增加立体感 */
+	box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.05);
+	border-radius: 8px;
+	padding: 4px;
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+		box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+		border-color 0.2s ease,
+		background-color 0.3s ease;
+	cursor: default;
+}
+
+.calendar-day:hover:not(.empty) {
+	transform: translateY(-2px);
+	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+	z-index: 2;
+	/* 悬停时边框颜色加深 */
+	border-color: var(--text-muted);
+}
+
+.calendar-day.empty {
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	pointer-events: none;
+}
+
+/* 今天的高亮样式 */
+.calendar-day.today {
+	border: 2px solid var(--interactive-accent);
+	box-shadow: 0 0 0 1px var(--background-primary), 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.calendar-day.today .calendar-day-number {
+	color: var(--interactive-accent);
+	font-weight: 800;
+	opacity: 1;
+}
+
+/* 日期数字 */
+.calendar-day-number {
+	font-size: 0.75em;
+	/* Smaller size */
+	font-weight: 500;
+	color: var(--text-muted);
+	opacity: 0.6;
+	/* Lower opacity */
+	line-height: 1;
+	text-align: right;
+	width: 100%;
+}
+
+/* 字数显示 */
+.calendar-day-count {
+	font-size: 0.85em;
+	/* Slightly larger */
+	font-weight: 600;
+	color: var(--text-normal);
+	/* 在深色背景上可能需要调整，但通常插件会自动适配 */
+	text-align: center;
+	margin-top: auto;
+	margin-bottom: 2px;
+	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+
+	/* 确保文字在深色背景上也清晰 */
+	padding: 2px 4px;
+	background-color: rgba(var(--background-primary-rgb), 0.4);
+	border-radius: 4px;
+	backdrop-filter: blur(2px);
+}
+
+/* 底部统计卡片 */
+.calendar-footer {
+	text-align: center;
+	padding: 16px;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 12px;
+	font-size: 0.9em;
+	color: var(--text-muted);
+	line-height: 1.6;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* 突出显示统计数字 */
+.calendar-footer strong {
+	color: var(--text-normal);
+	font-weight: 700;
+}
+
+/* 设置页面样式优化 */
+.word-count-color-description {
+	background: var(--background-secondary-alt);
+	padding: 16px;
+	border-radius: 8px;
+	margin-top: 12px;
+	border: 1px solid var(--background-modifier-border);
+}
+
+.word-count-color-description ul {
+	margin: 8px 0;
+	padding-left: 24px;
+}
+
+.word-count-color-description li {
+	margin: 6px 0;
+	color: var(--text-muted);
+}
