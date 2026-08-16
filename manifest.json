@@ -1,7 +1,7 @@
 {
     "id": "word-count-calendar",
-    "name": "字数与专注统计日历",
-    "version": "1.2.0",
+    "name": "Word Count Calendar",
+    "version": "1.2.1",
     "minAppVersion": "0.15.0",
     "description": "统计每日写作字数与笔记专注时长，提供日历、实时速度和专注排行。",
     "author": "熹微",
