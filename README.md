@@ -2,65 +2,57 @@
 
 Word Count Calendar is a local-first Obsidian plugin for visualizing daily writing progress and tracking focus time for individual notes. It never sends note content or statistics to external services.
 
-> 在 Obsidian 里看见每天的写作痕迹，也看见一篇笔记真正被投入过的时间。
+## Features
 
-**Word Count Calendar** is a local-first Obsidian plugin that visualizes daily writing progress in a calendar and tracks focus time for individual notes.
+- **Writing calendar**: Shows daily word counts, goals, and color-coded progress by month.
+- **Chinese and English word counting**: Counts CJK characters and space-separated English words while ignoring punctuation, frontmatter, and code blocks.
+- **Live writing speed**: Displays today's accumulated words and current writing speed in the status bar.
+- **Folder filters**: Include or exclude folders from word-count tracking.
+- **Daily note sync**: Optionally writes each day's added words to the `码字数` frontmatter property.
+- **Focus-time tracking**: Tracks focus time for the current note, today, and all notes, with a ranking view.
+- **Reliable event ledger**: Stores focus time as uniquely identified events, with conflict merging, checkpoints, and rolling backups.
+- **Rebuildable properties**: Optionally projects focus totals to note and daily-note frontmatter, and can rebuild those values from the event ledger.
+- **Legacy migration**: Imports data from the older `focus-time` plugin on first launch when available.
 
-一个本地优先的 Obsidian 插件：用日历展示每日写作字数，并以事件账本记录专注时长、笔记排行与累计投入。
+## Installation
 
-## 功能
+### Community plugins
 
-- **写作日历**：按月显示每日字数与目标完成度，颜色随完成度渐变。
-- **中英文混合统计**：中文按字计数，英文按空格分词；忽略标点、Frontmatter 与代码块。
-- **实时写作速度**：状态栏展示今日累计字数与当前写作速度。
-- **文件夹范围**：可设置参与统计或排除统计的文件夹。
-- **日记属性同步**：自动把当天新增字数写入日记的 `码字数` 属性。
-- **专注时长追踪**：统计今天、当前笔记与全部笔记的专注时长，并提供排行视图。
-- **可靠的数据账本**：专注时长按带唯一 ID 的事件保存，支持多设备合并、检查点恢复与滚动备份。
-- **属性投影与重建**：可把专注时长写入笔记的 `累计专注秒` 属性、日记的 `当日专注秒` 属性，也可由账本重新生成。
-- **旧数据迁移**：首次启动会尝试导入旧版 `focus-time` 插件的数据。
+After the plugin is approved and listed in the Obsidian Community plugin directory:
 
-## 安装
+1. Open **Settings → Community plugins** in Obsidian.
+2. Turn off Restricted mode if needed.
+3. Select **Browse**, search for **Word Count Calendar**, then install and enable it.
 
-### 从社区插件市场安装
+### Manual installation or latest-version testing
 
-插件通过审核并上架后，在 Obsidian 中打开：
+1. Download `main.js`, `manifest.json`, and `styles.css` from the matching GitHub Release.
+2. Create `.obsidian/plugins/word-count-calendar/` inside your vault.
+3. Put the three downloaded files in that folder.
+4. Restart Obsidian, or enable the plugin from **Settings → Community plugins**.
 
-1. **设置 → 第三方插件**。
-2. 关闭安全模式（如尚未关闭）。
-3. 点击 **浏览**，搜索“字数与专注统计日历”。
-4. 安装并启用插件。
+## Usage
 
-### 手动安装或测试最新版
+### Open views
 
-1. 下载对应版本 Release 中的 `main.js`、`manifest.json` 和 `styles.css`。
-2. 在你的库中创建文件夹：`.obsidian/plugins/word-count-calendar/`。
-3. 将这三个文件放入该文件夹。
-4. 重启 Obsidian，或在 **设置 → 第三方插件** 中启用本插件。
-
-## 使用
-
-### 打开视图
-
-- 点击左侧栏的日历图标，打开字数日历。
-- 点击左侧栏的计时器图标，打开专注统计。
-- 也可以从命令面板运行：
+- Select the calendar icon in the left ribbon to open the writing calendar.
+- Select the timer icon in the left ribbon to open focus statistics.
+- You can also use these Command Palette entries:
   - `打开字数统计日历`
   - `打开专注时长统计`
 
-### 可配置项
+### Settings
 
-在 **设置 → 字数与专注统计日历** 中可以配置：
+The settings tab lets you configure:
 
-- 每日目标字数
-- 参与统计与排除统计的文件夹
-- 日记文件夹与日记模板
-- 日历格子的颜色、透明度和大小
-- 是否追踪专注时长
-- 严格模式：Obsidian 失焦时暂停专注计时
-- 是否将专注时长同步到笔记和日记属性
+- Daily word goal.
+- Included and excluded folders.
+- Daily-note folder and template.
+- Calendar colors, opacity, and cell size.
+- Focus-time tracking and strict mode, which pauses tracking while Obsidian is unfocused.
+- Optional note and daily-note frontmatter projection for focus totals.
 
-### 命令
+### Commands
 
 - `打开字数统计日历`
 - `打开专注时长统计`
@@ -68,39 +60,60 @@ Word Count Calendar is a local-first Obsidian plugin for visualizing daily writi
 - `更新所有文件字数`
 - `从专注账本重建笔记属性`
 
-在 Markdown 文件的右键菜单中，还可以使用 **设置专注时长** 修正单篇笔记的统计值。
+The Markdown-file context menu also includes **设置专注时长**, which lets you correct a note's cumulative focus time.
 
-## 数据与隐私
+## Data and privacy
 
-本插件不连接网络，不收集遥测数据，也不会把笔记内容或统计数据发送到任何外部服务。
+This plugin is fully local-first. It does not connect to a network, collect telemetry, or send note content or statistics to external services.
 
-插件仅在当前 Obsidian 库内读写以下本地数据：
+The plugin only reads and writes the following local vault data:
 
-- 插件设置与字数缓存：`.obsidian/plugins/word-count-calendar/data.json`
-- 专注时长事件账本与备份：`.obsidian/plugins/word-count-calendar/focus-time-data*.json`、`focus-time-backups/`
-- 可选的笔记属性：`码字数`、`累计专注秒`、`当日专注秒`
+- Settings and word-count cache: `.obsidian/plugins/word-count-calendar/data.json`
+- Focus-time event ledger and backups: `.obsidian/plugins/word-count-calendar/focus-time-data*.json` and `focus-time-backups/`
+- Optional note properties: `码字数`, `累计专注秒`, and `当日专注秒`
 
-你可以随时在插件设置中关闭专注追踪或属性同步。删除插件前，如需保留历史专注数据，请备份上述文件。
+You can disable focus tracking or property projection at any time. Back up the listed focus-time files before removing the plugin if you want to preserve the history.
 
-## 开发
+## Development
 
 ```bash
 npm install
 npm run dev
 ```
 
-生产构建：
+Production build:
 
 ```bash
 npm run build
 ```
 
-提交 Release 时，请上传构建后的 `main.js`、`manifest.json` 与 `styles.css`。
+For a GitHub Release, upload the generated `main.js`, `manifest.json`, and `styles.css` files as release assets.
 
-## 反馈与贡献
+## Feedback and contribution
 
-问题反馈和功能建议请提交到本仓库的 [Issues](../../issues)。欢迎 Pull Request。
+Report bugs or feature requests through this repository's [Issues](../../issues). Pull requests are welcome.
 
-## 许可证
+## License
 
 [MIT License](LICENSE)
+
+---
+
+## 中文说明
+
+> 在 Obsidian 里看见每天的写作痕迹，也看见一篇笔记真正被投入过的时间。
+
+这是一个本地优先的 Obsidian 插件：用日历展示每日写作字数，并以事件账本记录专注时长、笔记排行与累计投入。插件不会把笔记内容或统计数据发送到外部服务。
+
+### 主要功能
+
+- 按月查看每日码字、目标完成度和颜色渐变。
+- 中英文混合字数统计，忽略 Frontmatter 与代码块。
+- 状态栏显示当日字数与实时码字速度。
+- 支持包含或排除指定文件夹。
+- 可将每日新增字数同步到日记的 `码字数` 属性。
+- 统计当前笔记、当天与全部笔记的专注时长，并提供排行视图。
+- 专注数据使用带唯一 ID 的事件账本保存，支持备份、合并与恢复。
+- 可将专注统计同步到 `累计专注秒`、`当日专注秒` 属性，也可从账本重建。
+
+安装方式、使用方式和隐私说明以上方英文正文为准；插件界面与命令保持中文。
