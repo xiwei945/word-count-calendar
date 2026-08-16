@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
+import { App, ButtonComponent, PluginSettingTab, Setting } from 'obsidian';
 import WordCountCalendarPlugin from './main';
 import { ColorWithOpacity } from './settings';
 
@@ -30,9 +30,9 @@ export class WordCountSettingTab extends PluginSettingTab {
         // 颜色选择器
         setting.addColorPicker(colorPicker => {
             colorPicker.setValue(colorSetting.color);
-            colorPicker.onChange(async (value) => {
+            colorPicker.onChange(value => {
                 colorSetting.color = value;
-                await onChange(colorSetting);
+                void onChange(colorSetting);
             });
         });
 
@@ -41,11 +41,22 @@ export class WordCountSettingTab extends PluginSettingTab {
             slider.setLimits(0, 100, 1);
             slider.setValue(colorSetting.opacity);
             slider.setDynamicTooltip();
-            slider.onChange(async (value) => {
+            slider.onChange(value => {
                 colorSetting.opacity = value;
-                await onChange(colorSetting);
+                void onChange(colorSetting);
             });
         });
+    }
+
+    private async rebuildFocusProperties(button: ButtonComponent): Promise<void> {
+        button.setDisabled(true);
+        button.setButtonText('重建中…');
+        await this.plugin.focusTracker.rebuildProperties();
+        button.setButtonText('重建完成');
+        window.setTimeout(() => {
+            button.setDisabled(false);
+            button.setButtonText('开始重建');
+        }, 1500);
     }
 
     display(): void {
@@ -63,11 +74,11 @@ export class WordCountSettingTab extends PluginSettingTab {
             .addText(text => text
                 .setPlaceholder('1000')
                 .setValue(String(this.plugin.settings.dailyGoal))
-                .onChange(async (value) => {
+                .onChange(value => {
                     const numValue = parseInt(value);
                     if (!isNaN(numValue) && numValue > 0) {
                         this.plugin.settings.dailyGoal = numValue;
-                        await this.plugin.saveSettings();
+                        this.plugin.saveSettings();
                         this.plugin.refreshCalendarView();
                     }
                 }));
@@ -81,11 +92,11 @@ export class WordCountSettingTab extends PluginSettingTab {
             .setDesc('统计当前打开笔记的专注时长，并在状态栏和统计视图中显示。')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.focusTrackingEnabled)
-                .onChange(async (value) => {
+                .onChange(value => {
                     this.plugin.focusTracker?.captureNow();
                     this.plugin.settings.focusTrackingEnabled = value;
                     this.plugin.focusTracker?.syncTrackingState();
-                    await this.plugin.saveSettings();
+                    this.plugin.saveSettings();
                     this.plugin.updateStatusBar();
                     this.plugin.refreshCalendarView();
                 }));
@@ -95,11 +106,11 @@ export class WordCountSettingTab extends PluginSettingTab {
             .setDesc('开启后，Obsidian 窗口失去焦点时暂停计时。')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.focusStrictMode)
-                .onChange(async (value) => {
+                .onChange(value => {
                     this.plugin.focusTracker?.captureNow();
                     this.plugin.settings.focusStrictMode = value;
                     this.plugin.focusTracker?.syncTrackingState();
-                    await this.plugin.saveSettings();
+                    this.plugin.saveSettings();
                     this.plugin.updateStatusBar();
                 }));
 
@@ -108,9 +119,9 @@ export class WordCountSettingTab extends PluginSettingTab {
             .setDesc('把账本计算结果写入对应笔记的“累计专注秒”和日记的“当日专注秒”。账本仍是唯一原始数据。')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.focusWriteProperties)
-                .onChange(async (value) => {
+                .onChange(value => {
                     this.plugin.settings.focusWriteProperties = value;
-                    await this.plugin.saveSettings();
+                    this.plugin.saveSettings();
                 }));
 
         new Setting(containerEl)
@@ -118,15 +129,8 @@ export class WordCountSettingTab extends PluginSettingTab {
             .setDesc('根据事件账本重新计算已有笔记和已有日记的专注属性，不会创建历史日记。')
             .addButton(button => button
                 .setButtonText('开始重建')
-                .onClick(async () => {
-                    button.setDisabled(true);
-                    button.setButtonText('重建中…');
-                    await this.plugin.focusTracker.rebuildProperties();
-                    button.setButtonText('重建完成');
-                    window.setTimeout(() => {
-                        button.setDisabled(false);
-                        button.setButtonText('开始重建');
-                    }, 1500);
+                .onClick(() => {
+                    void this.rebuildFocusProperties(button);
                 }));
 
         const focusStorageDesc = containerEl.createDiv({ cls: 'word-count-color-description' });
@@ -145,9 +149,9 @@ export class WordCountSettingTab extends PluginSettingTab {
             '无数据格子颜色',
             '设置没有数据的日期格子的背景颜色和透明度',
             this.plugin.settings.emptyCellColor,
-            async (value) => {
+            value => {
                 this.plugin.settings.emptyCellColor = value;
-                await this.plugin.saveSettings();
+                this.plugin.saveSettings();
                 this.plugin.refreshCalendarView();
             }
         );
@@ -158,9 +162,9 @@ export class WordCountSettingTab extends PluginSettingTab {
             'Level 1 颜色',
             '字数 < 40% 目标时的格子颜色和透明度',
             this.plugin.settings.level1Color,
-            async (value) => {
+            value => {
                 this.plugin.settings.level1Color = value;
-                await this.plugin.saveSettings();
+                this.plugin.saveSettings();
                 this.plugin.refreshCalendarView();
             }
         );
@@ -171,9 +175,9 @@ export class WordCountSettingTab extends PluginSettingTab {
             'Level 2 颜色',
             '字数 40% - 70% 目标时的格子颜色和透明度',
             this.plugin.settings.level2Color,
-            async (value) => {
+            value => {
                 this.plugin.settings.level2Color = value;
-                await this.plugin.saveSettings();
+                this.plugin.saveSettings();
                 this.plugin.refreshCalendarView();
             }
         );
@@ -184,9 +188,9 @@ export class WordCountSettingTab extends PluginSettingTab {
             'Level 3 颜色',
             '字数 70% - 100% 目标时的格子颜色和透明度',
             this.plugin.settings.level3Color,
-            async (value) => {
+            value => {
                 this.plugin.settings.level3Color = value;
-                await this.plugin.saveSettings();
+                this.plugin.saveSettings();
                 this.plugin.refreshCalendarView();
             }
         );
@@ -197,9 +201,9 @@ export class WordCountSettingTab extends PluginSettingTab {
             'Level 4 颜色',
             '字数 ≥ 100% 目标时的格子颜色和透明度',
             this.plugin.settings.level4Color,
-            async (value) => {
+            value => {
                 this.plugin.settings.level4Color = value;
-                await this.plugin.saveSettings();
+                this.plugin.saveSettings();
                 this.plugin.refreshCalendarView();
             }
         );
@@ -217,9 +221,9 @@ export class WordCountSettingTab extends PluginSettingTab {
                 slider.setLimits(30, 80, 1);
                 slider.setValue(this.plugin.settings.cellSize);
                 slider.setDynamicTooltip();
-                slider.onChange(async (value) => {
+                slider.onChange(value => {
                     this.plugin.settings.cellSize = value;
-                    await this.plugin.saveSettings();
+                    this.plugin.saveSettings();
                     this.plugin.refreshCalendarView();
                 });
             });
@@ -231,9 +235,9 @@ export class WordCountSettingTab extends PluginSettingTab {
             .addText(text => text
                 .setPlaceholder('留空或填写文件夹路径')
                 .setValue(this.plugin.settings.dailyNotesFolder)
-                .onChange(async (value) => {
+                .onChange(value => {
                     this.plugin.settings.dailyNotesFolder = value.trim();
-                    await this.plugin.saveSettings();
+                    this.plugin.saveSettings();
                 }));
 
         // 日记模板设置
@@ -243,9 +247,9 @@ export class WordCountSettingTab extends PluginSettingTab {
             .addText(text => text
                 .setPlaceholder('留空或填写模板文件路径，如：Templates/Daily Note.md')
                 .setValue(this.plugin.settings.dailyNoteTemplate)
-                .onChange(async (value) => {
+                .onChange(value => {
                     this.plugin.settings.dailyNoteTemplate = value.trim();
-                    await this.plugin.saveSettings();
+                    this.plugin.saveSettings();
                 }));
 
         // 包含文件夹设置
@@ -255,12 +259,12 @@ export class WordCountSettingTab extends PluginSettingTab {
             .addTextArea(text => {
                 text.setPlaceholder('日记,笔记')
                     .setValue(this.plugin.settings.includeFolders.join(','))
-                    .onChange(async (value) => {
+                    .onChange(value => {
                         this.plugin.settings.includeFolders = value
                             .split(',')
                             .map(f => f.trim())
                             .filter(f => f.length > 0);
-                        await this.plugin.saveSettings();
+                        this.plugin.saveSettings();
                         this.plugin.refreshCalendarView();
                     });
                 text.inputEl.rows = 3;
@@ -274,12 +278,12 @@ export class WordCountSettingTab extends PluginSettingTab {
             .addTextArea(text => {
                 text.setPlaceholder('模板,归档')
                     .setValue(this.plugin.settings.excludeFolders.join(','))
-                    .onChange(async (value) => {
+                    .onChange(value => {
                         this.plugin.settings.excludeFolders = value
                             .split(',')
                             .map(f => f.trim())
                             .filter(f => f.length > 0);
-                        await this.plugin.saveSettings();
+                        this.plugin.saveSettings();
                         this.plugin.refreshCalendarView();
                     });
                 text.inputEl.rows = 3;
@@ -293,17 +297,17 @@ export class WordCountSettingTab extends PluginSettingTab {
             .addButton(button => button
                 .setButtonText('清空缓存')
                 .setWarning()
-                .onClick(async () => {
-                    const confirmed = confirm(
+                .onClick(() => {
+                    const confirmed = window.confirm(
                         '确定要清空所有字数缓存吗？\n\n' +
                         '清空后，所有文件在下次编辑时会重新建立字数基线。\n' +
                         '这不会影响已记录的日记数据。'
                     );
                     if (confirmed) {
                         this.plugin.settings.wordCountCache = {};
-                        await this.plugin.saveSettings();
+                        this.plugin.saveSettings();
                         button.setButtonText('已清空');
-                        setTimeout(() => {
+                        window.setTimeout(() => {
                             button.setButtonText('清空缓存');
                         }, 2000);
                     }

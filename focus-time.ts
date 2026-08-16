@@ -88,6 +88,10 @@ function isFiniteNonNegative(value: unknown): value is number {
     return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
+function parseJson(text: string): unknown {
+    return JSON.parse(text) as unknown;
+}
+
 // Shared rule for "transient" file names (Untitled / 未命名). Such paths are reused
 // across many short-lived notes and must not anchor aliases or tracking.
 function isTransientBasename(basename: string): boolean {
@@ -541,7 +545,7 @@ class FocusTimeStore {
 
             for (const path of legacyFiles) {
                 try {
-                    const parsed = JSON.parse(await adapter.read(path)) as {
+                    const parsed = parseJson(await adapter.read(path)) as {
                         readData?: Record<string, LegacyFocusRecord>;
                     };
                     Object.entries(parsed.readData ?? {}).forEach(([key, record]) => {
@@ -593,7 +597,7 @@ class FocusTimeStore {
                 const parts = rawDate.split('-').map(Number);
                 if (parts.length !== 3 || parts.some(part => !Number.isFinite(part))) continue;
                 const date = `${parts[0]}-${String(parts[1]).padStart(2, '0')}-${String(parts[2]).padStart(2, '0')}`;
-                const parsed = JSON.parse(await adapter.read(path)) as {
+                const parsed = parseJson(await adapter.read(path)) as {
                     dailyReadData?: Record<string, { fileId?: string; duration?: number }>;
                 };
                 Object.values(parsed.dailyReadData ?? {}).forEach(record => {
@@ -691,7 +695,7 @@ class FocusTimeStore {
         const written = await adapter.process(this.dataPath, currentText => {
             if (currentText.trim() && !approvedRecovery) {
                 try {
-                    const external = parseFocusData(JSON.parse(currentText));
+                    const external = parseFocusData(parseJson(currentText));
                     if (external) finalData = mergeFocusData(external, finalData);
                 } catch (error) {
                     console.warn('主专注账本损坏，使用内存与备份恢复:', error);
@@ -701,7 +705,7 @@ class FocusTimeStore {
             return JSON.stringify(finalData, null, 2);
         });
 
-        const persisted = parseFocusData(JSON.parse(written));
+        const persisted = parseFocusData(parseJson(written));
         this.data = persisted
             ? (approvedRecovery
                 ? mergePreservingHistory(persisted, this.data)
@@ -776,7 +780,7 @@ class FocusTimeStore {
         try {
             const adapter = this.plugin.app.vault.adapter;
             if (!(await adapter.exists(path))) return null;
-            return parseFocusData(JSON.parse(await adapter.read(path)));
+            return parseFocusData(parseJson(await adapter.read(path)));
         } catch (error) {
             console.warn(`无法读取专注事件账本: ${path}`, error);
             return null;

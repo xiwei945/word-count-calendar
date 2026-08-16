@@ -1,5 +1,4 @@
-import { App, FuzzySuggestModal, ItemView, WorkspaceLeaf, TFile, Notice, Menu, setIcon } from 'obsidian';
-import { WordCountSettings } from './settings';
+import { App, FuzzySuggestModal, ItemView, MarkdownView, WorkspaceLeaf, TFile, Notice, Menu, setIcon } from 'obsidian';
 import { ColorGradient } from './color-gradient';
 import WordCountCalendarPlugin from './main';
 import { FocusLeaderboardPeriod, FocusRecord, formatFocusDuration } from './focus-time';
@@ -393,14 +392,14 @@ export class CalendarView extends ItemView {
         });
         const calendarGrid = calendarStage.createDiv({ cls: 'calendar-grid' });
 
-        calendarGrid.addEventListener('click', async (e) => {
+        calendarGrid.addEventListener('click', e => {
             const dayEl = (e.target as HTMLElement).closest('.calendar-day:not(.empty)');
             if (dayEl instanceof HTMLElement) {
                 const dateStr = dayEl.getAttribute('data-date');
                 if (dateStr) {
                     const wordCount = Number(dayEl.getAttribute('data-count') || 0);
                     this.selectCalendarDate(calendarGrid, dayEl, dateStr, wordCount);
-                    await this.openDailyNote(dateStr);
+                    void this.openDailyNote(dateStr);
                 }
             }
         });
@@ -789,7 +788,7 @@ export class CalendarView extends ItemView {
         // 3. 打开文件（复用已有标签页，避免重复打开）
         const noteToOpen = dailyNote;
         const existingLeaf = this.app.workspace.getLeavesOfType('markdown')
-            .find(leaf => (leaf.view as any).file?.path === noteToOpen.path);
+            .find(leaf => leaf.view instanceof MarkdownView && leaf.view.file?.path === noteToOpen.path);
         if (existingLeaf) {
             this.app.workspace.setActiveLeaf(existingLeaf, { focus: true });
         } else {
@@ -905,37 +904,30 @@ export class CalendarView extends ItemView {
             text: '0 字/时'
         });
 
-        const chart = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        chart.addClass('today-speed-chart');
-        chart.setAttribute('viewBox', '0 0 300 92');
-        chart.setAttribute('preserveAspectRatio', 'none');
-        chart.setAttribute('role', 'img');
-        chart.setAttribute('aria-label', '实时码字速度趋势');
-        card.appendChild(chart);
-
-        [22, 48, 74].forEach(y => {
-            const gridLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            gridLine.addClass('today-speed-grid');
-            gridLine.setAttribute('d', `M6 ${y} H294`);
-            chart.appendChild(gridLine);
+        const chart = card.createSvg('svg', {
+            cls: 'today-speed-chart',
+            attr: {
+                viewBox: '0 0 300 92',
+                preserveAspectRatio: 'none',
+                role: 'img',
+                'aria-label': '实时码字速度趋势'
+            }
         });
 
-        this.todaySpeedArea = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        this.todaySpeedArea.addClass('today-speed-area');
-        chart.appendChild(this.todaySpeedArea);
+        [22, 48, 74].forEach(y => {
+            chart.createSvg('path', {
+                cls: 'today-speed-grid',
+                attr: { d: `M6 ${y} H294` }
+            });
+        });
 
-        this.todaySpeedLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        this.todaySpeedLine.addClass('today-speed-line');
-        chart.appendChild(this.todaySpeedLine);
-
-        this.todaySpeedFlow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        this.todaySpeedFlow.addClass('today-speed-flow');
-        chart.appendChild(this.todaySpeedFlow);
-
-        this.todaySpeedDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        this.todaySpeedDot.addClass('today-speed-dot');
-        this.todaySpeedDot.setAttribute('r', '3.4');
-        chart.appendChild(this.todaySpeedDot);
+        this.todaySpeedArea = chart.createSvg('path', { cls: 'today-speed-area' });
+        this.todaySpeedLine = chart.createSvg('path', { cls: 'today-speed-line' });
+        this.todaySpeedFlow = chart.createSvg('path', { cls: 'today-speed-flow' });
+        this.todaySpeedDot = chart.createSvg('circle', {
+            cls: 'today-speed-dot',
+            attr: { r: '3.4' }
+        });
 
         const footer = card.createDiv({ cls: 'today-speed-footer' });
         footer.createSpan({ text: '刚才' });
@@ -1264,12 +1256,8 @@ export class CalendarView extends ItemView {
             .setTitle('归属到其他笔记')
             .setIcon('git-merge')
             .onClick(() => {
-                new TargetFileSuggest(this.app, async target => {
-                    const count = await this.plugin.focusTracker.reassignRecord(record, target.path);
-                    if (count > 0) {
-                        new Notice(`已归属 ${count} 条事件到「${target.basename}」`);
-                    }
-                    this.render();
+                new TargetFileSuggest(this.app, target => {
+                    void this.reassignFocusRecord(record, target);
                 }).open();
             })
         );
@@ -1279,20 +1267,32 @@ export class CalendarView extends ItemView {
             .setTitle('删除此专注记录')
             .setIcon('trash-2')
             .setWarning(true)
-            .onClick(async () => {
-                const displayName = this.getFocusRecordDisplayName(record.filePath);
-                const confirmed = window.confirm(
-                    `确定删除“${displayName}”的全部专注记录吗？\n\n该删除会同步到其他设备。`
-                );
-                if (!confirmed) return;
-
-                const deletedCount = await this.plugin.focusTracker.deleteRecord(record);
-                new Notice(`已删除“${displayName}”的 ${deletedCount} 条专注事件`);
-                this.render();
+            .onClick(() => {
+                void this.deleteFocusRecord(record);
             })
         );
 
         menu.showAtMouseEvent(event);
+    }
+
+    private async reassignFocusRecord(record: FocusRecord, target: TFile): Promise<void> {
+        const count = await this.plugin.focusTracker.reassignRecord(record, target.path);
+        if (count > 0) {
+            new Notice(`已归属 ${count} 条事件到「${target.basename}」`);
+        }
+        this.render();
+    }
+
+    private async deleteFocusRecord(record: FocusRecord): Promise<void> {
+        const displayName = this.getFocusRecordDisplayName(record.filePath);
+        const confirmed = window.confirm(
+            `确定删除“${displayName}”的全部专注记录吗？\n\n该删除会同步到其他设备。`
+        );
+        if (!confirmed) return;
+
+        const deletedCount = await this.plugin.focusTracker.deleteRecord(record);
+        new Notice(`已删除“${displayName}”的 ${deletedCount} 条专注事件`);
+        this.render();
     }
 
     private createFocusMetric(container: HTMLElement, label: string, duration: number): HTMLElement {
@@ -1351,15 +1351,15 @@ export class CalendarView extends ItemView {
             element.textContent = String(currentValue);
 
             if (progress < 1) {
-                requestAnimationFrame(animate);
+                window.requestAnimationFrame(animate);
             } else {
                 // 动画结束后移除缩放类
-                setTimeout(() => {
+                window.setTimeout(() => {
                     element.removeClass('number-pulse');
                 }, 200);
             }
         };
 
-        requestAnimationFrame(animate);
+        window.requestAnimationFrame(animate);
     }
 }

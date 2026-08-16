@@ -1,4 +1,4 @@
-import { App, Menu, Modal, Notice, Plugin, Setting, TFile, parseYaml } from 'obsidian';
+import { App, Modal, Notice, Plugin, Setting, TFile, parseYaml } from 'obsidian';
 import { WordCountSettings, DEFAULT_SETTINGS } from './settings';
 import { WordCounter } from './word-counter';
 import { CalendarView, VIEW_TYPE_CALENDAR } from './calendar-view';
@@ -7,6 +7,10 @@ import { FocusTimeTracker, formatFocusDuration } from './focus-time';
 
 type FrontmatterRecord = Record<string, unknown>;
 
+type LegacyColorSettings = Partial<WordCountSettings> & {
+    emptyCellColor?: unknown;
+};
+
 interface PendingWordUpdate {
     increment: number;
     sourceFiles: Map<string, TFile>;
@@ -14,13 +18,6 @@ interface PendingWordUpdate {
 
 const WORD_COUNT_FLUSH_INTERVAL_MS = 2_000;
 const MANAGED_MODIFY_IGNORE_MS = 250;
-const MANAGED_DAILY_FRONTMATTER_KEYS = new Set([
-    '码字数',
-    'related',
-    '累计专注秒',
-    '当日专注秒'
-]);
-
 /**
  * 字数统计日历插件主类
  */
@@ -77,19 +74,19 @@ export default class WordCountCalendarPlugin extends Plugin {
 
         // 添加ribbon图标
         this.addRibbonIcon('calendar', '字数统计日历', () => {
-            this.activateView();
+            void this.activateView();
         });
 
         this.addRibbonIcon('timer', '专注时长统计', () => {
-            this.activateFocusView();
+            void this.activateFocusView();
         });
 
         // 添加命令
         this.addCommand({
-            id: 'open-word-count-calendar',
+            id: 'open-calendar',
             name: '打开字数统计日历',
             callback: () => {
-                this.activateView();
+                void this.activateView();
             }
         });
 
@@ -97,7 +94,7 @@ export default class WordCountCalendarPlugin extends Plugin {
             id: 'open-focus-time-statistics',
             name: '打开专注时长统计',
             callback: () => {
-                this.activateFocusView();
+                void this.activateFocusView();
             }
         });
 
@@ -125,30 +122,30 @@ export default class WordCountCalendarPlugin extends Plugin {
 
         // 监听文件修改
         this.registerEvent(
-            this.app.vault.on('modify', async (file) => {
+            this.app.vault.on('modify', file => {
                 if (file instanceof TFile && file.extension === 'md') {
                     if (this.shouldIgnoreManagedModify(file.path)) return;
-                    await this.queueFileModified(file);
+                    void this.queueFileModified(file);
                 }
             })
         );
 
         // 监听文件创建
         this.registerEvent(
-            this.app.vault.on('create', async (file) => {
+            this.app.vault.on('create', file => {
                 if (file instanceof TFile && file.extension === 'md') {
-                    await this.onFileCreated(file);
+                    void this.onFileCreated(file);
                 }
             })
         );
 
         // 监听元数据缓存变化（frontmatter更新时刷新界面）
         this.registerEvent(
-            this.app.metadataCache.on('changed', (file) => {
+            this.app.metadataCache.on('changed', file => {
                 // 如果是今天的日记文件，刷新状态栏和日历
                 const today = this.getDateString(new Date());
                 if (file instanceof TFile && file.basename === today) {
-                    this.updateTodayWordCount();
+                    void this.updateTodayWordCount();
                     this.refreshCalendarView();
                 }
             })
@@ -162,8 +159,8 @@ export default class WordCountCalendarPlugin extends Plugin {
         this.statusBarItem.setText('今日码字: 加载中...'); // 显示占位文本
 
         // 延迟加载，等 Obsidian 完全启动后再执行
-        setTimeout(() => {
-            this.updateTodayWordCount();
+        window.setTimeout(() => {
+            void this.updateTodayWordCount();
         }, 1000); // 延迟 1 秒
 
         // 启动定时器，每2秒刷新一次状态栏（用于速度衰减）
@@ -252,7 +249,7 @@ export default class WordCountCalendarPlugin extends Plugin {
             const directFile = this.app.vault.getAbstractFileByPath(expectedPath);
             if (directFile instanceof TFile) {
                 this.settings.dailyNotePaths[dateStr] = directFile.path;
-                await this.saveSettings();
+                this.saveSettings();
                 return directFile;
             }
         }
@@ -264,7 +261,7 @@ export default class WordCountCalendarPlugin extends Plugin {
                 const directFile = this.app.vault.getAbstractFileByPath(expectedPath);
                 if (directFile instanceof TFile) {
                     this.settings.dailyNotePaths[dateStr] = directFile.path;
-                    await this.saveSettings();
+                    this.saveSettings();
                     return directFile;
                 }
             }
@@ -276,7 +273,7 @@ export default class WordCountCalendarPlugin extends Plugin {
         if (found) {
             // 缓存找到的路径
             this.settings.dailyNotePaths[dateStr] = found.path;
-            await this.saveSettings();
+            this.saveSettings();
         }
         return found || null;
     }
@@ -781,10 +778,11 @@ export default class WordCountCalendarPlugin extends Plugin {
      * 加载设置
      */
     async loadSettings() {
-        const loadedSettings = await this.loadData();
-        
+        const loadedSettings: unknown = await this.loadData();
+        const settingsPatch = isRecord(loadedSettings) ? loadedSettings : {};
+
         // 合并设置，确保新字段有默认值
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedSettings);
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, settingsPatch) as WordCountSettings;
         
         // 数据迁移：兼容旧版本设置
         this.migrateSettings();
@@ -798,9 +796,9 @@ export default class WordCountCalendarPlugin extends Plugin {
      */
     private migrateSettings() {
         // 兼容旧版本：如果 emptyCellColor 是字符串，转换为 ColorWithOpacity
-        if (typeof (this.settings as any).emptyCellColor === 'string') {
-            const oldColor = (this.settings as any).emptyCellColor;
-            this.settings.emptyCellColor = { color: oldColor, opacity: 100 };
+        const legacySettings = this.settings as LegacyColorSettings;
+        if (typeof legacySettings.emptyCellColor === 'string') {
+            this.settings.emptyCellColor = { color: legacySettings.emptyCellColor, opacity: 100 };
         }
         
         // 确保所有颜色字段都存在
@@ -874,7 +872,7 @@ export default class WordCountCalendarPlugin extends Plugin {
     /**
      * 保存设置（延迟保存，避免频繁写入）
      */
-    async saveSettings() {
+    saveSettings(): void {
         if (this.unloading) return;
         // 清除之前的定时器
         if (this.settingsSaveTimer !== null) {
@@ -882,9 +880,10 @@ export default class WordCountCalendarPlugin extends Plugin {
         }
         
         // 延迟 1 秒保存
-        this.settingsSaveTimer = window.setTimeout(async () => {
-            await this.saveData(this.settings);
-            this.settingsSaveTimer = null;
+        this.settingsSaveTimer = window.setTimeout(() => {
+            void this.saveData(this.settings).finally(() => {
+                this.settingsSaveTimer = null;
+            });
         }, 1000);
     }
 }
@@ -980,6 +979,10 @@ class FocusDurationInputModal extends Modal {
  * 码字速度计算辅助类
  * 使用 60 秒滑动窗口统计输入量，外推为每小时字数
  */
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 class WPHCalculator {
     private history: { time: number; count: number }[] = [];
     private readonly WINDOW_MS = 60 * 1000; // 60-second sliding window
