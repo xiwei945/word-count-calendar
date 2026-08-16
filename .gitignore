@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 build/
+main.js
 *.js.map
 
 # Obsidian runtime data

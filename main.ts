@@ -53,8 +53,6 @@ export default class WordCountCalendarPlugin extends Plugin {
     }
 
     async onload() {
-        console.log('加载字数统计日历插件');
-
         // 加载设置
         await this.loadSettings();
 
@@ -193,7 +191,6 @@ export default class WordCountCalendarPlugin extends Plugin {
             this.settingsSaveTimer = null;
         }
         this.focusTracker?.prepareForUnload();
-        console.log('卸载字数统计日历插件');
     }
 
     /**
@@ -225,7 +222,6 @@ export default class WordCountCalendarPlugin extends Plugin {
             const pathWithExtension = `${templatePath}.md`;
             templateFile = this.app.vault.getAbstractFileByPath(pathWithExtension);
             if (templateFile instanceof TFile) {
-                console.log(`自动添加 .md 扩展名: ${templatePath} -> ${pathWithExtension}`);
                 return templateFile;
             }
         }
@@ -402,7 +398,6 @@ export default class WordCountCalendarPlugin extends Plugin {
     ): Promise<void> {
         const dailyNote = await this.getOrCreateDailyNote(dateStr);
         if (!dailyNote) {
-            console.log(`无法创建日记: ${dateStr}`);
             return;
         }
 
@@ -872,7 +867,6 @@ export default class WordCountCalendarPlugin extends Plugin {
         }
         
         if (cleanedCount > 0) {
-            console.log(`清理了 ${cleanedCount} 个过期缓存条目`);
             this.saveSettings();
         }
     }
