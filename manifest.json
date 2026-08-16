@@ -1,9 +1,9 @@
 {
     "id": "word-count-calendar",
     "name": "Word Count Calendar",
-    "version": "1.2.1",
-    "minAppVersion": "0.15.0",
-    "description": "统计每日写作字数与笔记专注时长，提供日历、实时速度和专注排行。",
+    "version": "1.2.2",
+    "minAppVersion": "1.7.2",
+    "description": "Track daily writing progress and note focus time with a calendar.",
     "author": "熹微",
     "authorUrl": "https://github.com/xiwei945",
     "isDesktopOnly": false

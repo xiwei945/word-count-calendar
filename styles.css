@@ -1,5 +1,30 @@
 /* 字数与专注统计视图 */
 
+.word-count-calendar-view-header-hidden {
+    display: none;
+}
+
+.word-count-calendar-view-content {
+    border: none;
+    box-shadow: none;
+}
+
+.word-count-calendar-recovery-message {
+    white-space: pre-line;
+}
+
+.word-count-calendar-focus-duration-input {
+    width: 100px;
+}
+
+.word-count-calendar-modal-primary-button {
+    margin-top: 12px;
+}
+
+.word-count-calendar-modal-secondary-button {
+    margin-left: 8px;
+}
+
 .word-count-calendar-container {
     --calendar-level-1: #9be9a8;
     --calendar-level-2: #40c463;

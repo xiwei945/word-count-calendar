@@ -128,14 +128,13 @@ export class CalendarView extends ItemView {
         // 隐藏视图标题栏
         const header = this.containerEl.querySelector('.view-header');
         if (header) {
-            (header as HTMLElement).style.display = 'none';
+            header.addClass('word-count-calendar-view-header-hidden');
         }
 
         // 移除视图容器的边框和阴影
         const viewContent = this.containerEl.children[1] as HTMLElement;
         if (viewContent) {
-            viewContent.style.boxShadow = 'none';
-            viewContent.style.border = 'none';
+            viewContent.addClass('word-count-calendar-view-content');
         }
 
         this.render();
@@ -182,8 +181,9 @@ export class CalendarView extends ItemView {
         container.addClass('word-count-calendar-container');
 
         // 设置格子大小 CSS 变量
-        container.style.setProperty('--calendar-cell-size',
-            `${this.plugin.settings.cellSize}px`);
+        container.setCssProps({
+            '--calendar-cell-size': `${this.plugin.settings.cellSize}px`
+        });
 
         // 渲染标签导航
         this.renderTabNavigation(container);
@@ -222,8 +222,10 @@ export class CalendarView extends ItemView {
                 : null);
         if (transitionStart) {
             tabNav.addClass('is-switching');
-            tabNav.style.setProperty('--tab-start-offset', transitionStart);
-            tabNav.style.setProperty('--tab-end-offset', offsets[this.currentTab]);
+            tabNav.setCssProps({
+                '--tab-start-offset': transitionStart,
+                '--tab-end-offset': offsets[this.currentTab]
+            });
         }
 
         // 使用统一的标签创建方法
@@ -296,7 +298,7 @@ export class CalendarView extends ItemView {
                 }, 0);
                 this.render();
             } else {
-                tabNav.style.removeProperty('--tab-drag-offset');
+                tabNav.setCssProps({ '--tab-drag-offset': '' });
                 if (cancelled) this.suppressTabClick = false;
             }
 
@@ -334,7 +336,7 @@ export class CalendarView extends ItemView {
             event.preventDefault();
             const { step, maxOffset } = getMetrics();
             currentOffset = Math.max(0, Math.min(maxOffset, startIndex * step + deltaX));
-            tabNav.style.setProperty('--tab-drag-offset', `${currentOffset}px`);
+            tabNav.setCssProps({ '--tab-drag-offset': `${currentOffset}px` });
         });
 
         tabNav.addEventListener('pointerup', event => finishDrag(event, false));
@@ -459,11 +461,12 @@ export class CalendarView extends ItemView {
             dayEl.setAttribute('data-count', String(wordCount));
             dayEl.setAttribute('role', 'button');
             dayEl.tabIndex = 0;
-            dayEl.style.setProperty('--calendar-day-index', String(day + startWeekDay));
-            dayEl.style.setProperty(
-                '--calendar-progress',
-                String(Math.min(wordCount / Math.max(this.plugin.settings.dailyGoal, 1), 1))
-            );
+            dayEl.setCssProps({
+                '--calendar-day-index': String(day + startWeekDay),
+                '--calendar-progress': String(
+                    Math.min(wordCount / Math.max(this.plugin.settings.dailyGoal, 1), 1)
+                )
+            });
 
             const color = ColorGradient.getColor(
                 wordCount,
@@ -476,7 +479,7 @@ export class CalendarView extends ItemView {
                     level4: this.plugin.settings.level4Color
                 }
             );
-            dayEl.style.setProperty('--calendar-day-color', color);
+            dayEl.setCssProps({ '--calendar-day-color': color });
 
             const dayHeader = dayEl.createDiv({ cls: 'calendar-day-header' });
             dayHeader.createSpan({ cls: 'calendar-day-number', text: String(day) });
@@ -577,10 +580,9 @@ export class CalendarView extends ItemView {
         this.selectedDateDisplay?.setText(this.formatCalendarDate(dateStr));
         this.selectedCountDisplay?.setText(wordCount.toLocaleString('zh-CN'));
         this.selectedProgressDisplay?.setText(`目标 ${percentage}%`);
-        this.selectedProgressTrack?.style.setProperty(
-            '--calendar-selected-progress',
-            `${Math.min(percentage, 100)}%`
-        );
+        this.selectedProgressTrack?.setCssProps({
+            '--calendar-selected-progress': `${Math.min(percentage, 100)}%`
+        });
     }
 
     private formatCalendarDate(dateStr: string): string {
@@ -832,7 +834,9 @@ export class CalendarView extends ItemView {
 
         const hero = todayDetailContainer.createDiv({ cls: 'today-hero' });
         this.todayProgressRing = hero.createDiv({ cls: 'today-progress-ring' });
-        this.todayProgressRing.style.setProperty('--today-progress', `${Math.min(progress, 100)}%`);
+        this.todayProgressRing.setCssProps({
+            '--today-progress': `${Math.min(progress, 100)}%`
+        });
         this.todayProgressRing.classList.toggle('completed', todayCount >= goal);
         const ringContent = this.todayProgressRing.createDiv({ cls: 'today-ring-content' });
         this.wordCountDisplay = ringContent.createDiv({
@@ -1045,7 +1049,9 @@ export class CalendarView extends ItemView {
         }
 
         const progress = this.getGoalProgress(newCount);
-        this.todayProgressRing?.style.setProperty('--today-progress', `${Math.min(progress, 100)}%`);
+        this.todayProgressRing?.setCssProps({
+            '--today-progress': `${Math.min(progress, 100)}%`
+        });
         this.todayProgressRing?.classList.toggle(
             'completed',
             newCount >= Math.max(this.plugin.settings.dailyGoal, 1)
@@ -1135,19 +1141,17 @@ export class CalendarView extends ItemView {
             option => option.value === this.focusLeaderboardPeriod
         );
         const periodIndicator = periodSwitcher.createDiv({ cls: 'focus-period-indicator' });
-        periodIndicator.style.setProperty(
-            '--focus-period-offset',
-            `calc(${activePeriodIndex * 100}% + ${activePeriodIndex * 3}px)`
-        );
+        periodIndicator.setCssProps({
+            '--focus-period-offset': `calc(${activePeriodIndex * 100}% + ${activePeriodIndex * 3}px)`
+        });
         if (this.previousFocusPeriod) {
             const previousIndex = FOCUS_PERIOD_OPTIONS.findIndex(
                 option => option.value === this.previousFocusPeriod
             );
             periodIndicator.addClass('is-switching');
-            periodIndicator.style.setProperty(
-                '--focus-period-start-offset',
-                `calc(${previousIndex * 100}% + ${previousIndex * 3}px)`
-            );
+            periodIndicator.setCssProps({
+                '--focus-period-start-offset': `calc(${previousIndex * 100}% + ${previousIndex * 3}px)`
+            });
         }
         FOCUS_PERIOD_OPTIONS.forEach(option => {
             const button = periodSwitcher.createEl('button', {
@@ -1210,10 +1214,9 @@ export class CalendarView extends ItemView {
                 });
                 const progress = body.createDiv({ cls: 'focus-record-progress' });
                 const progressBar = progress.createSpan();
-                progressBar.style.setProperty(
-                    '--focus-progress',
-                    `${Math.max(record.durationMs / maxDuration * 100, 2)}%`
-                );
+                progressBar.setCssProps({
+                    '--focus-progress': `${Math.max(record.durationMs / maxDuration * 100, 2)}%`
+                });
                 const open = () => void this.plugin.focusTracker.openRecord(record);
                 entry.onclick = open;
                 entry.onkeydown = event => {

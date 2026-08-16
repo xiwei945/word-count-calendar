@@ -409,17 +409,19 @@ class FocusRecoveryModal extends Modal {
     onOpen(): void {
         this.titleEl.setText('\u68c0\u6d4b\u5230\u4e13\u6ce8\u6570\u636e\u53ef\u80fd\u5f02\u5e38');
         this.contentEl.empty();
-        const messageEl = this.contentEl.createEl('p', { text: this.message });
-        messageEl.style.whiteSpace = 'pre-line';
+        this.contentEl.createEl('p', {
+            text: this.message,
+            cls: 'word-count-calendar-recovery-message'
+        });
         const restore = this.contentEl.createEl('button', {
             text: '\u6062\u590d\u5907\u4efd',
             cls: 'mod-cta'
         });
         restore.addEventListener('click', () => this.decide(true));
         const keep = this.contentEl.createEl('button', {
-            text: '\u4fdd\u7559\u5f53\u524d\u6570\u636e'
+            text: '\u4fdd\u7559\u5f53\u524d\u6570\u636e',
+            cls: 'word-count-calendar-modal-secondary-button'
         });
-        keep.style.marginLeft = '8px';
         keep.addEventListener('click', () => this.decide(false));
         restore.focus();
 

@@ -933,14 +933,18 @@ class FocusDurationInputModal extends Modal {
             .setDesc(
                 `当前：${formatFocusDuration(this.currentMs)}（约 ${currentMinutes} 分钟）。输入 0 即清除全部专注记录。`
             );
-        const input = setting.controlEl.createEl('input', { type: 'number' });
+        const input = setting.controlEl.createEl('input', {
+            type: 'number',
+            cls: 'word-count-calendar-focus-duration-input'
+        });
         input.value = String(currentMinutes);
         input.min = '0';
         input.step = '1';
-        input.style.width = '100px';
 
-        const confirmBtn = this.contentEl.createEl('button', { text: '确认', cls: 'mod-cta' });
-        confirmBtn.style.marginTop = '12px';
+        const confirmBtn = this.contentEl.createEl('button', {
+            text: '确认',
+            cls: 'mod-cta word-count-calendar-modal-primary-button'
+        });
         confirmBtn.addEventListener('click', () => {
             const minutes = Number(input.value);
             if (!Number.isFinite(minutes) || minutes < 0) {
@@ -950,8 +954,10 @@ class FocusDurationInputModal extends Modal {
             this.settle(minutes);
         });
 
-        const cancelBtn = this.contentEl.createEl('button', { text: '取消' });
-        cancelBtn.style.marginLeft = '8px';
+        const cancelBtn = this.contentEl.createEl('button', {
+            text: '取消',
+            cls: 'word-count-calendar-modal-secondary-button'
+        });
         cancelBtn.addEventListener('click', () => this.settle(null));
 
         input.focus();

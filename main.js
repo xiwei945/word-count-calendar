@@ -472,17 +472,19 @@ var FocusRecoveryModal = class extends import_obsidian.Modal {
   onOpen() {
     this.titleEl.setText("\u68C0\u6D4B\u5230\u4E13\u6CE8\u6570\u636E\u53EF\u80FD\u5F02\u5E38");
     this.contentEl.empty();
-    const messageEl = this.contentEl.createEl("p", { text: this.message });
-    messageEl.style.whiteSpace = "pre-line";
+    this.contentEl.createEl("p", {
+      text: this.message,
+      cls: "word-count-calendar-recovery-message"
+    });
     const restore = this.contentEl.createEl("button", {
       text: "\u6062\u590D\u5907\u4EFD",
       cls: "mod-cta"
     });
     restore.addEventListener("click", () => this.decide(true));
     const keep = this.contentEl.createEl("button", {
-      text: "\u4FDD\u7559\u5F53\u524D\u6570\u636E"
+      text: "\u4FDD\u7559\u5F53\u524D\u6570\u636E",
+      cls: "word-count-calendar-modal-secondary-button"
     });
-    keep.style.marginLeft = "8px";
     keep.addEventListener("click", () => this.decide(false));
     restore.focus();
     this.modalEl.addEventListener("keydown", (event) => {
@@ -1502,12 +1504,11 @@ var CalendarView = class extends import_obsidian2.ItemView {
   async onOpen() {
     const header = this.containerEl.querySelector(".view-header");
     if (header) {
-      header.style.display = "none";
+      header.addClass("word-count-calendar-view-header-hidden");
     }
     const viewContent = this.containerEl.children[1];
     if (viewContent) {
-      viewContent.style.boxShadow = "none";
-      viewContent.style.border = "none";
+      viewContent.addClass("word-count-calendar-view-content");
     }
     this.render();
   }
@@ -1548,10 +1549,9 @@ var CalendarView = class extends import_obsidian2.ItemView {
     const container = this.containerEl.children[1];
     container.empty();
     container.addClass("word-count-calendar-container");
-    container.style.setProperty(
-      "--calendar-cell-size",
-      `${this.plugin.settings.cellSize}px`
-    );
+    container.setCssProps({
+      "--calendar-cell-size": `${this.plugin.settings.cellSize}px`
+    });
     this.renderTabNavigation(container);
     const contentContainer = container.createDiv({ cls: "tab-content-container" });
     switch (this.currentTab) {
@@ -1582,8 +1582,10 @@ var CalendarView = class extends import_obsidian2.ItemView {
     const transitionStart = (_a = this.tabTransitionStartOffset) != null ? _a : this.previousTab && this.previousTab !== this.currentTab ? offsets[this.previousTab] : null;
     if (transitionStart) {
       tabNav.addClass("is-switching");
-      tabNav.style.setProperty("--tab-start-offset", transitionStart);
-      tabNav.style.setProperty("--tab-end-offset", offsets[this.currentTab]);
+      tabNav.setCssProps({
+        "--tab-start-offset": transitionStart,
+        "--tab-end-offset": offsets[this.currentTab]
+      });
     }
     this.renderTabButton(tabNav, "calendar" /* CALENDAR */);
     this.renderTabButton(tabNav, "today" /* TODAY */);
@@ -1650,7 +1652,7 @@ var CalendarView = class extends import_obsidian2.ItemView {
         }, 0);
         this.render();
       } else {
-        tabNav.style.removeProperty("--tab-drag-offset");
+        tabNav.setCssProps({ "--tab-drag-offset": "" });
         if (cancelled)
           this.suppressTabClick = false;
       }
@@ -1687,7 +1689,7 @@ var CalendarView = class extends import_obsidian2.ItemView {
       event.preventDefault();
       const { step, maxOffset } = getMetrics();
       currentOffset = Math.max(0, Math.min(maxOffset, startIndex * step + deltaX));
-      tabNav.style.setProperty("--tab-drag-offset", `${currentOffset}px`);
+      tabNav.setCssProps({ "--tab-drag-offset": `${currentOffset}px` });
     });
     tabNav.addEventListener("pointerup", (event) => finishDrag(event, false));
     tabNav.addEventListener("pointercancel", (event) => finishDrag(event, true));
@@ -1781,11 +1783,12 @@ var CalendarView = class extends import_obsidian2.ItemView {
       dayEl.setAttribute("data-count", String(wordCount));
       dayEl.setAttribute("role", "button");
       dayEl.tabIndex = 0;
-      dayEl.style.setProperty("--calendar-day-index", String(day + startWeekDay));
-      dayEl.style.setProperty(
-        "--calendar-progress",
-        String(Math.min(wordCount / Math.max(this.plugin.settings.dailyGoal, 1), 1))
-      );
+      dayEl.setCssProps({
+        "--calendar-day-index": String(day + startWeekDay),
+        "--calendar-progress": String(
+          Math.min(wordCount / Math.max(this.plugin.settings.dailyGoal, 1), 1)
+        )
+      });
       const color = ColorGradient.getColor(
         wordCount,
         this.plugin.settings.dailyGoal,
@@ -1797,7 +1800,7 @@ var CalendarView = class extends import_obsidian2.ItemView {
           level4: this.plugin.settings.level4Color
         }
       );
-      dayEl.style.setProperty("--calendar-day-color", color);
+      dayEl.setCssProps({ "--calendar-day-color": color });
       const dayHeader = dayEl.createDiv({ cls: "calendar-day-header" });
       dayHeader.createSpan({ cls: "calendar-day-number", text: String(day) });
       if (wordCount > 0) {
@@ -1878,10 +1881,9 @@ var CalendarView = class extends import_obsidian2.ItemView {
     (_a = this.selectedDateDisplay) == null ? void 0 : _a.setText(this.formatCalendarDate(dateStr));
     (_b = this.selectedCountDisplay) == null ? void 0 : _b.setText(wordCount.toLocaleString("zh-CN"));
     (_c = this.selectedProgressDisplay) == null ? void 0 : _c.setText(`\u76EE\u6807 ${percentage}%`);
-    (_d = this.selectedProgressTrack) == null ? void 0 : _d.style.setProperty(
-      "--calendar-selected-progress",
-      `${Math.min(percentage, 100)}%`
-    );
+    (_d = this.selectedProgressTrack) == null ? void 0 : _d.setCssProps({
+      "--calendar-selected-progress": `${Math.min(percentage, 100)}%`
+    });
   }
   formatCalendarDate(dateStr) {
     const [, month, day] = dateStr.split("-");
@@ -2107,7 +2109,9 @@ var CalendarView = class extends import_obsidian2.ItemView {
     const progress = this.getGoalProgress(todayCount);
     const hero = todayDetailContainer.createDiv({ cls: "today-hero" });
     this.todayProgressRing = hero.createDiv({ cls: "today-progress-ring" });
-    this.todayProgressRing.style.setProperty("--today-progress", `${Math.min(progress, 100)}%`);
+    this.todayProgressRing.setCssProps({
+      "--today-progress": `${Math.min(progress, 100)}%`
+    });
     this.todayProgressRing.classList.toggle("completed", todayCount >= goal);
     const ringContent = this.todayProgressRing.createDiv({ cls: "today-ring-content" });
     this.wordCountDisplay = ringContent.createDiv({
@@ -2292,7 +2296,9 @@ var CalendarView = class extends import_obsidian2.ItemView {
       }
     }
     const progress = this.getGoalProgress(newCount);
-    (_a = this.todayProgressRing) == null ? void 0 : _a.style.setProperty("--today-progress", `${Math.min(progress, 100)}%`);
+    (_a = this.todayProgressRing) == null ? void 0 : _a.setCssProps({
+      "--today-progress": `${Math.min(progress, 100)}%`
+    });
     (_b = this.todayProgressRing) == null ? void 0 : _b.classList.toggle(
       "completed",
       newCount >= Math.max(this.plugin.settings.dailyGoal, 1)
@@ -2373,19 +2379,17 @@ var CalendarView = class extends import_obsidian2.ItemView {
       (option) => option.value === this.focusLeaderboardPeriod
     );
     const periodIndicator = periodSwitcher.createDiv({ cls: "focus-period-indicator" });
-    periodIndicator.style.setProperty(
-      "--focus-period-offset",
-      `calc(${activePeriodIndex * 100}% + ${activePeriodIndex * 3}px)`
-    );
+    periodIndicator.setCssProps({
+      "--focus-period-offset": `calc(${activePeriodIndex * 100}% + ${activePeriodIndex * 3}px)`
+    });
     if (this.previousFocusPeriod) {
       const previousIndex = FOCUS_PERIOD_OPTIONS.findIndex(
         (option) => option.value === this.previousFocusPeriod
       );
       periodIndicator.addClass("is-switching");
-      periodIndicator.style.setProperty(
-        "--focus-period-start-offset",
-        `calc(${previousIndex * 100}% + ${previousIndex * 3}px)`
-      );
+      periodIndicator.setCssProps({
+        "--focus-period-start-offset": `calc(${previousIndex * 100}% + ${previousIndex * 3}px)`
+      });
     }
     FOCUS_PERIOD_OPTIONS.forEach((option) => {
       const button = periodSwitcher.createEl("button", {
@@ -2451,10 +2455,9 @@ var CalendarView = class extends import_obsidian2.ItemView {
         });
         const progress = body.createDiv({ cls: "focus-record-progress" });
         const progressBar = progress.createSpan();
-        progressBar.style.setProperty(
-          "--focus-progress",
-          `${Math.max(record.durationMs / maxDuration * 100, 2)}%`
-        );
+        progressBar.setCssProps({
+          "--focus-progress": `${Math.max(record.durationMs / maxDuration * 100, 2)}%`
+        });
         const open = () => void this.plugin.focusTracker.openRecord(record);
         entry.onclick = open;
         entry.onkeydown = (event) => {
@@ -2607,7 +2610,7 @@ var WordCountSettingTab = class extends import_obsidian3.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "\u5B57\u6570\u7EDF\u8BA1\u65E5\u5386\u8BBE\u7F6E" });
+    new import_obsidian3.Setting(containerEl).setName("\u5B57\u6570\u7EDF\u8BA1\u65E5\u5386").setHeading();
     new import_obsidian3.Setting(containerEl).setName("\u6BCF\u65E5\u76EE\u6807\u5B57\u6570").setDesc("\u8BBE\u7F6E\u6BCF\u5929\u7684\u5199\u4F5C\u5B57\u6570\u76EE\u6807\uFF0C\u7528\u4E8E\u989C\u8272\u6E10\u53D8\u663E\u793A").addText((text) => text.setPlaceholder("1000").setValue(String(this.plugin.settings.dailyGoal)).onChange(async (value) => {
       const numValue = parseInt(value);
       if (!isNaN(numValue) && numValue > 0) {
@@ -2616,7 +2619,7 @@ var WordCountSettingTab = class extends import_obsidian3.PluginSettingTab {
         this.plugin.refreshCalendarView();
       }
     }));
-    containerEl.createEl("h2", { text: "\u4E13\u6CE8\u65F6\u957F\u7EDF\u8BA1" });
+    new import_obsidian3.Setting(containerEl).setName("\u4E13\u6CE8\u65F6\u957F\u7EDF\u8BA1").setHeading();
     new import_obsidian3.Setting(containerEl).setName("\u542F\u7528\u4E13\u6CE8\u65F6\u957F\u7EDF\u8BA1").setDesc("\u7EDF\u8BA1\u5F53\u524D\u6253\u5F00\u7B14\u8BB0\u7684\u4E13\u6CE8\u65F6\u957F\uFF0C\u5E76\u5728\u72B6\u6001\u680F\u548C\u7EDF\u8BA1\u89C6\u56FE\u4E2D\u663E\u793A\u3002").addToggle((toggle) => toggle.setValue(this.plugin.settings.focusTrackingEnabled).onChange(async (value) => {
       var _a, _b;
       (_a = this.plugin.focusTracker) == null ? void 0 : _a.captureNow();
@@ -2652,7 +2655,7 @@ var WordCountSettingTab = class extends import_obsidian3.PluginSettingTab {
     focusStorageDesc.createEl("p", {
       text: "focus-time-data.json \u4FDD\u5B58\u5E26\u552F\u4E00 ID \u7684\u4E13\u6CE8\u4E8B\u4EF6\u8D26\u672C\uFF1B\u5C5E\u6027\u53EA\u662F\u53EF\u91CD\u5EFA\u6C47\u603B\u3002\u8D26\u672C\u4F1A\u7EF4\u62A4\u5907\u4EFD\u3001\u5408\u5E76\u540C\u6B65\u51B2\u7A81\uFF0C\u5E76\u5728\u9996\u6B21\u8FD0\u884C\u65F6\u8F6C\u6362\u65E7 focus-time \u6570\u636E\u3002"
     });
-    containerEl.createEl("h2", { text: "\u683C\u5B50\u989C\u8272\u8BBE\u7F6E" });
+    new import_obsidian3.Setting(containerEl).setName("\u683C\u5B50\u989C\u8272").setHeading();
     this.addColorWithOpacitySetting(
       containerEl,
       "\u65E0\u6570\u636E\u683C\u5B50\u989C\u8272",
@@ -2708,7 +2711,7 @@ var WordCountSettingTab = class extends import_obsidian3.PluginSettingTab {
         this.plugin.refreshCalendarView();
       }
     );
-    containerEl.createEl("h2", { text: "\u683C\u5B50\u5927\u5C0F\u8BBE\u7F6E" });
+    new import_obsidian3.Setting(containerEl).setName("\u65E5\u8BB0\u4E0E\u65E5\u5386").setHeading();
     new import_obsidian3.Setting(containerEl).setName("\u683C\u5B50\u5927\u5C0F").setDesc("\u8C03\u6574\u65E5\u5386\u683C\u5B50\u7684\u5927\u5C0F\uFF0830px - 80px\uFF09").addSlider((slider) => {
       slider.setLimits(30, 80, 1);
       slider.setValue(this.plugin.settings.cellSize);
@@ -2758,7 +2761,7 @@ var WordCountSettingTab = class extends import_obsidian3.PluginSettingTab {
         }, 2e3);
       }
     }));
-    containerEl.createEl("h3", { text: "\u989C\u8272\u8BF4\u660E" });
+    new import_obsidian3.Setting(containerEl).setName("\u989C\u8272\u8BF4\u660E").setHeading();
     const colorDesc = containerEl.createDiv({ cls: "word-count-color-description" });
     colorDesc.createEl("p", { text: "\u65E5\u5386\u989C\u8272\u53C2\u8003 GitHub \u8D21\u732E\u56FE\u6A21\u5F0F (\u7EFF\u8272\u7CFB)\uFF1A" });
     const ul = colorDesc.createEl("ul");
@@ -2768,7 +2771,7 @@ var WordCountSettingTab = class extends import_obsidian3.PluginSettingTab {
     ul.createEl("li", { text: "Level 3: 70% - 100% \u76EE\u6807" });
     ul.createEl("li", { text: "Level 4: \u2265 100% \u76EE\u6807" });
     ul.createEl("li", { text: "\u65E0\u6570\u636E\uFF1A\u53EF\u81EA\u5B9A\u4E49\u989C\u8272" });
-    containerEl.createEl("h3", { text: "\u4F7F\u7528\u8BF4\u660E" });
+    new import_obsidian3.Setting(containerEl).setName("\u4F7F\u7528\u8BF4\u660E").setHeading();
     const usageDesc = containerEl.createDiv({ cls: "word-count-color-description" });
     usageDesc.createEl("p", { text: "\u63D2\u4EF6\u4F7F\u7528\u589E\u91CF\u7EDF\u8BA1\u65B9\u5F0F\uFF1A" });
     const usageUl = usageDesc.createEl("ul");
@@ -3515,13 +3518,17 @@ var FocusDurationInputModal = class extends import_obsidian4.Modal {
     const setting = new import_obsidian4.Setting(this.contentEl).setName(`\u300C${this.displayName}\u300D\u4E13\u6CE8\u65F6\u957F\uFF08\u5206\u949F\uFF09`).setDesc(
       `\u5F53\u524D\uFF1A${formatFocusDuration(this.currentMs)}\uFF08\u7EA6 ${currentMinutes} \u5206\u949F\uFF09\u3002\u8F93\u5165 0 \u5373\u6E05\u9664\u5168\u90E8\u4E13\u6CE8\u8BB0\u5F55\u3002`
     );
-    const input = setting.controlEl.createEl("input", { type: "number" });
+    const input = setting.controlEl.createEl("input", {
+      type: "number",
+      cls: "word-count-calendar-focus-duration-input"
+    });
     input.value = String(currentMinutes);
     input.min = "0";
     input.step = "1";
-    input.style.width = "100px";
-    const confirmBtn = this.contentEl.createEl("button", { text: "\u786E\u8BA4", cls: "mod-cta" });
-    confirmBtn.style.marginTop = "12px";
+    const confirmBtn = this.contentEl.createEl("button", {
+      text: "\u786E\u8BA4",
+      cls: "mod-cta word-count-calendar-modal-primary-button"
+    });
     confirmBtn.addEventListener("click", () => {
       const minutes = Number(input.value);
       if (!Number.isFinite(minutes) || minutes < 0) {
@@ -3530,8 +3537,10 @@ var FocusDurationInputModal = class extends import_obsidian4.Modal {
       }
       this.settle(minutes);
     });
-    const cancelBtn = this.contentEl.createEl("button", { text: "\u53D6\u6D88" });
-    cancelBtn.style.marginLeft = "8px";
+    const cancelBtn = this.contentEl.createEl("button", {
+      text: "\u53D6\u6D88",
+      cls: "word-count-calendar-modal-secondary-button"
+    });
     cancelBtn.addEventListener("click", () => this.settle(null));
     input.focus();
     input.select();

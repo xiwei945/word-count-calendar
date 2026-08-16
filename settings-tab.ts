@@ -52,7 +52,9 @@ export class WordCountSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
-        containerEl.createEl('h2', { text: '字数统计日历设置' });
+        new Setting(containerEl)
+            .setName('字数统计日历')
+            .setHeading();
 
         // 每日目标设置
         new Setting(containerEl)
@@ -70,7 +72,9 @@ export class WordCountSettingTab extends PluginSettingTab {
                     }
                 }));
 
-        containerEl.createEl('h2', { text: '专注时长统计' });
+        new Setting(containerEl)
+            .setName('专注时长统计')
+            .setHeading();
 
         new Setting(containerEl)
             .setName('启用专注时长统计')
@@ -131,7 +135,9 @@ export class WordCountSettingTab extends PluginSettingTab {
         });
 
         // 格子颜色设置组
-        containerEl.createEl('h2', { text: '格子颜色设置' });
+        new Setting(containerEl)
+            .setName('格子颜色')
+            .setHeading();
 
         // 无数据格子颜色
         this.addColorWithOpacitySetting(
@@ -199,7 +205,9 @@ export class WordCountSettingTab extends PluginSettingTab {
         );
 
         // 格子大小设置组
-        containerEl.createEl('h2', { text: '格子大小设置' });
+        new Setting(containerEl)
+            .setName('日记与日历')
+            .setHeading();
 
         // 格子大小
         new Setting(containerEl)
@@ -302,7 +310,9 @@ export class WordCountSettingTab extends PluginSettingTab {
                 }));
 
         // 颜色说明
-        containerEl.createEl('h3', { text: '颜色说明' });
+        new Setting(containerEl)
+            .setName('颜色说明')
+            .setHeading();
         const colorDesc = containerEl.createDiv({ cls: 'word-count-color-description' });
         colorDesc.createEl('p', { text: '日历颜色参考 GitHub 贡献图模式 (绿色系)：' });
         const ul = colorDesc.createEl('ul');
@@ -314,7 +324,9 @@ export class WordCountSettingTab extends PluginSettingTab {
         ul.createEl('li', { text: '无数据：可自定义颜色' });
 
         // 使用说明
-        containerEl.createEl('h3', { text: '使用说明' });
+        new Setting(containerEl)
+            .setName('使用说明')
+            .setHeading();
         const usageDesc = containerEl.createDiv({ cls: 'word-count-color-description' });
         usageDesc.createEl('p', { text: '插件使用增量统计方式：' });
         const usageUl = usageDesc.createEl('ul');
