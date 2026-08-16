@@ -1400,7 +1400,7 @@ export class FocusTimeTracker {
         if (!file || file.extension !== 'md') return false;
 
         const cache = this.plugin.app.metadataCache.getFileCache(file);
-        const currentProperty = cache?.frontmatter?.[NOTE_FOCUS_PROPERTY];
+        const currentProperty: unknown = cache?.frontmatter?.[NOTE_FOCUS_PROPERTY];
         const calculatedSeconds = Math.round(this.getRecordDuration(path) / 1000);
 
         // Use max(current, calculated) to respect manual increases while continuing to track.
@@ -1422,7 +1422,7 @@ export class FocusTimeTracker {
 
     private async writeDailyProjection(date: string, dailyNote: TFile): Promise<boolean> {
         const cache = this.plugin.app.metadataCache.getFileCache(dailyNote);
-        const currentProperty = cache?.frontmatter?.[DAILY_FOCUS_PROPERTY];
+        const currentProperty: unknown = cache?.frontmatter?.[DAILY_FOCUS_PROPERTY];
         const calculatedSeconds = Math.round(this.getDateDuration(date) / 1000);
 
         // Use max(current, calculated) to respect manual increases while continuing to track

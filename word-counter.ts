@@ -35,7 +35,7 @@ export class WordCounter {
         content = content.replace(/`[^`]*`/g, '');
 
         // 移除链接markdown语法
-        content = content.replace(/\[([^\]]*)\]\([^\)]*\)/g, '$1');
+        content = content.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
 
         // 统计中文字符
         const chineseChars = content.match(/[\u4e00-\u9fa5]/g);

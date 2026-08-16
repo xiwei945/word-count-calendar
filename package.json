@@ -1,6 +1,6 @@
 {
     "name": "word-count-calendar",
-    "version": "1.2.4",
+    "version": "1.2.5",
     "description": "Obsidian plugin for word count calendar and focus-time tracking",
     "main": "main.js",
     "scripts": {

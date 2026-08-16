@@ -1,6 +1,7 @@
 import { App, ButtonComponent, PluginSettingTab, Setting } from 'obsidian';
 import WordCountCalendarPlugin from './main';
 import { ColorWithOpacity } from './settings';
+import { ConfirmationModal } from './confirmation-modal';
 
 /**
  * 设置页面
@@ -57,6 +58,23 @@ export class WordCountSettingTab extends PluginSettingTab {
             button.setDisabled(false);
             button.setButtonText('开始重建');
         }, 1500);
+    }
+
+    private async clearWordCountCache(button: ButtonComponent): Promise<void> {
+        const confirmed = await new ConfirmationModal(
+            this.app,
+            '清空字数缓存',
+            '清空后，所有文件会在下次编辑时重新建立字数基线。这不会影响已记录的日记数据。',
+            '清空缓存'
+        ).waitForDecision();
+        if (!confirmed) return;
+
+        this.plugin.settings.wordCountCache = {};
+        this.plugin.saveSettings();
+        button.setButtonText('已清空');
+        window.setTimeout(() => {
+            button.setButtonText('清空缓存');
+        }, 2000);
     }
 
     display(): void {
@@ -298,19 +316,7 @@ export class WordCountSettingTab extends PluginSettingTab {
                 .setButtonText('清空缓存')
                 .setWarning()
                 .onClick(() => {
-                    const confirmed = window.confirm(
-                        '确定要清空所有字数缓存吗？\n\n' +
-                        '清空后，所有文件在下次编辑时会重新建立字数基线。\n' +
-                        '这不会影响已记录的日记数据。'
-                    );
-                    if (confirmed) {
-                        this.plugin.settings.wordCountCache = {};
-                        this.plugin.saveSettings();
-                        button.setButtonText('已清空');
-                        window.setTimeout(() => {
-                            button.setButtonText('清空缓存');
-                        }, 2000);
-                    }
+                    void this.clearWordCountCache(button);
                 }));
 
         // 颜色说明

@@ -520,10 +520,8 @@ export default class WordCountCalendarPlugin extends Plugin {
         const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(content);
         if (!match) return {};
         try {
-            const parsed = parseYaml(match[1]);
-            return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-                ? parsed as FrontmatterRecord
-                : {};
+            const parsed: unknown = parseYaml(match[1]);
+            return isRecord(parsed) ? parsed : {};
         } catch (error) {
             console.warn('无法解析疑似被重置日记的属性，跳过自动模板恢复:', error);
             return {};
@@ -609,7 +607,8 @@ export default class WordCountCalendarPlugin extends Plugin {
 
         if (dailyNote) {
             const cache = this.app.metadataCache.getFileCache(dailyNote);
-            this.todayWordCount = cache?.frontmatter?.['码字数'] || 0;
+            const wordCount: unknown = cache?.frontmatter?.['码字数'];
+            this.todayWordCount = typeof wordCount === 'number' ? wordCount : 0;
         } else {
             this.todayWordCount = 0;
         }
@@ -782,7 +781,7 @@ export default class WordCountCalendarPlugin extends Plugin {
         const settingsPatch = isRecord(loadedSettings) ? loadedSettings : {};
 
         // 合并设置，确保新字段有默认值
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, settingsPatch) as WordCountSettings;
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, settingsPatch);
         
         // 数据迁移：兼容旧版本设置
         this.migrateSettings();

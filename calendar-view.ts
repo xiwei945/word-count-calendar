@@ -2,6 +2,7 @@ import { App, FuzzySuggestModal, ItemView, MarkdownView, WorkspaceLeaf, TFile, N
 import { ColorGradient } from './color-gradient';
 import WordCountCalendarPlugin from './main';
 import { FocusLeaderboardPeriod, FocusRecord, formatFocusDuration } from './focus-time';
+import { ConfirmationModal } from './confirmation-modal';
 
 class TargetFileSuggest extends FuzzySuggestModal<TFile> {
     constructor(app: App, private readonly onPick: (file: TFile) => void) {
@@ -1285,9 +1286,12 @@ export class CalendarView extends ItemView {
 
     private async deleteFocusRecord(record: FocusRecord): Promise<void> {
         const displayName = this.getFocusRecordDisplayName(record.filePath);
-        const confirmed = window.confirm(
-            `确定删除“${displayName}”的全部专注记录吗？\n\n该删除会同步到其他设备。`
-        );
+        const confirmed = await new ConfirmationModal(
+            this.app,
+            '删除专注记录',
+            `确定删除“${displayName}”的全部专注记录吗？该删除会同步到其他设备。`,
+            '删除'
+        ).waitForDecision();
         if (!confirmed) return;
 
         const deletedCount = await this.plugin.focusTracker.deleteRecord(record);

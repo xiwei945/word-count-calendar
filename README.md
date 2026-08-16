@@ -1,8 +1,10 @@
 # Word Count Calendar
 
+Word Count Calendar is a local-first Obsidian plugin for visualizing daily writing progress and tracking focus time for individual notes. It never sends note content or statistics to external services.
+
 > 在 Obsidian 里看见每天的写作痕迹，也看见一篇笔记真正被投入过的时间。
 
-**Word Count Calendar** is a local-first Obsidian plugin that visualizes daily writing progress in a calendar and tracks focus time for individual notes. It never sends note content or statistics to external services.
+**Word Count Calendar** is a local-first Obsidian plugin that visualizes daily writing progress in a calendar and tracks focus time for individual notes.
 
 一个本地优先的 Obsidian 插件：用日历展示每日写作字数，并以事件账本记录专注时长、笔记排行与累计投入。
 

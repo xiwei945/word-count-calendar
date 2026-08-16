@@ -25,6 +25,13 @@
     margin-left: 8px;
 }
 
+.word-count-calendar-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+}
+
 .word-count-calendar-container {
     --calendar-level-1: #9be9a8;
     --calendar-level-2: #40c463;
@@ -619,8 +626,8 @@
     cursor: grabbing;
 }
 
-.tab-navigation.is-dragging::before {
-    transform: translateX(var(--tab-drag-offset)) !important;
+.word-count-calendar-container .tab-navigation.is-dragging::before {
+    transform: translateX(var(--tab-drag-offset));
     animation: none;
     transition: none;
 }
@@ -649,9 +656,9 @@
 .word-count-calendar-container .tab-navigation > .tab-button {
     appearance: none;
     -webkit-appearance: none;
-    border-color: transparent !important;
-    background: transparent !important;
-    box-shadow: none !important;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
 }
 
 .tab-button svg {
@@ -706,14 +713,14 @@
     backdrop-filter: blur(16px) saturate(1.35);
 }
 
-.calendar-month-display {
+.word-count-calendar-container .calendar-month-display {
     min-width: 0;
     height: 28px;
     padding: 0 9px;
-    border: 0 !important;
+    border: 0;
     border-radius: 8px;
-    background: transparent !important;
-    box-shadow: none !important;
+    background: transparent;
+    box-shadow: none;
     font-size: 15px;
     font-weight: 700;
     letter-spacing: 0.02em;
@@ -721,8 +728,8 @@
     transition: color 160ms ease, background-color 160ms ease;
 }
 
-.calendar-month-display.active {
-    background: color-mix(in srgb, var(--interactive-accent) 11%, transparent) !important;
+.word-count-calendar-container .calendar-month-display.active {
+    background: color-mix(in srgb, var(--interactive-accent) 11%, transparent);
     color: var(--interactive-accent);
 }
 
@@ -739,13 +746,13 @@
     line-height: 1;
 }
 
-.calendar-month-control > .calendar-nav-btn {
+.word-count-calendar-container .calendar-month-control > .calendar-nav-btn {
     width: 28px;
     min-width: 28px;
     height: 28px;
-    border: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
 }
 
 .calendar-month-control > .calendar-nav-btn svg {
@@ -790,11 +797,11 @@
     text-align: center;
 }
 
-.calendar-picker-year-button,
-.calendar-picker-month {
-    border: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
+.word-count-calendar-container .calendar-picker-year-button,
+.word-count-calendar-container .calendar-picker-month {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
 }
 
 .calendar-picker-year-button {
@@ -827,9 +834,9 @@
     font-size: 10px;
 }
 
-.calendar-picker-month.active {
-    border: 1px solid color-mix(in srgb, var(--interactive-accent) 30%, transparent) !important;
-    background: color-mix(in srgb, var(--interactive-accent) 14%, transparent) !important;
+.word-count-calendar-container .calendar-picker-month.active {
+    border: 1px solid color-mix(in srgb, var(--interactive-accent) 30%, transparent);
+    background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
     color: var(--interactive-accent);
     font-weight: 750;
 }
@@ -1632,19 +1639,19 @@
     animation: wc-focus-period-slide 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.focus-period-button {
+.word-count-calendar-container .focus-period-button {
     position: relative;
     z-index: 1;
     min-height: 34px;
     padding: 4px 3px;
-    border-color: transparent !important;
-    background: transparent !important;
-    box-shadow: none !important;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
     font-size: 13px;
 }
 
-.focus-period-button.active {
-    background: transparent !important;
+.word-count-calendar-container .focus-period-button.active {
+    background: transparent;
     color: color-mix(in srgb, var(--interactive-accent) 86%, var(--text-normal));
 }
 
@@ -1743,28 +1750,28 @@
         transform: translateY(-1px);
     }
 
-    .tab-button:hover {
-        background: color-mix(in srgb, white 6%, transparent) !important;
+    .word-count-calendar-container .tab-button:hover {
+        background: color-mix(in srgb, white 6%, transparent);
         color: var(--text-normal);
     }
 
-    .tab-button.active:hover {
-        background: transparent !important;
+    .word-count-calendar-container .tab-button.active:hover {
+        background: transparent;
         color: color-mix(in srgb, var(--interactive-accent) 84%, var(--text-normal));
     }
 
-    .calendar-month-control > .calendar-nav-btn:hover,
-    .calendar-month-display:hover,
-    .calendar-picker-year-button:hover,
-    .calendar-picker-month:hover,
-    .focus-period-button:hover {
-        background: color-mix(in srgb, white 7%, transparent) !important;
+    .word-count-calendar-container .calendar-month-control > .calendar-nav-btn:hover,
+    .word-count-calendar-container .calendar-month-display:hover,
+    .word-count-calendar-container .calendar-picker-year-button:hover,
+    .word-count-calendar-container .calendar-picker-month:hover,
+    .word-count-calendar-container .focus-period-button:hover {
+        background: color-mix(in srgb, white 7%, transparent);
         color: var(--text-normal);
     }
 
-    .calendar-picker-month.active:hover,
-    .focus-period-button.active:hover {
-        background: color-mix(in srgb, var(--interactive-accent) 14%, transparent) !important;
+    .word-count-calendar-container .calendar-picker-month.active:hover,
+    .word-count-calendar-container .focus-period-button.active:hover {
+        background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
         color: var(--interactive-accent);
     }
 }
@@ -1884,13 +1891,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .word-count-calendar-container *,
-    .word-count-calendar-container *::before,
-    .word-count-calendar-container *::after {
-        scroll-behavior: auto !important;
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
+    .word-count-calendar-container.word-count-calendar-container *,
+    .word-count-calendar-container.word-count-calendar-container *::before,
+    .word-count-calendar-container.word-count-calendar-container *::after {
+        scroll-behavior: auto;
+        animation-duration: 0.01ms;
+        animation-iteration-count: 1;
+        transition-duration: 0.01ms;
     }
 }
 
