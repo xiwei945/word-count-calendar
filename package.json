@@ -1,14 +1,14 @@
 {
     "name": "word-count-calendar",
-    "version": "1.0.0",
-    "description": "Obsidian plugin for word count calendar visualization",
+    "version": "1.2.0",
+    "description": "Obsidian plugin for word count calendar and focus-time tracking",
     "main": "main.js",
     "scripts": {
         "dev": "node esbuild.config.mjs",
         "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
     },
     "keywords": [],
-    "author": "",
+    "author": "熹微",
     "license": "MIT",
     "devDependencies": {
         "@types/node": "^16.11.6",

@@ -1,8 +1,25 @@
-import { Plugin, TFile, Notice } from 'obsidian';
+import { App, Menu, Modal, Notice, Plugin, Setting, TFile, parseYaml } from 'obsidian';
 import { WordCountSettings, DEFAULT_SETTINGS } from './settings';
 import { WordCounter } from './word-counter';
 import { CalendarView, VIEW_TYPE_CALENDAR } from './calendar-view';
 import { WordCountSettingTab } from './settings-tab';
+import { FocusTimeTracker, formatFocusDuration } from './focus-time';
+
+type FrontmatterRecord = Record<string, unknown>;
+
+interface PendingWordUpdate {
+    increment: number;
+    sourceFiles: Map<string, TFile>;
+}
+
+const WORD_COUNT_FLUSH_INTERVAL_MS = 2_000;
+const MANAGED_MODIFY_IGNORE_MS = 250;
+const MANAGED_DAILY_FRONTMATTER_KEYS = new Set([
+    '码字数',
+    'related',
+    '累计专注秒',
+    '当日专注秒'
+]);
 
 /**
  * 字数统计日历插件主类
@@ -10,15 +27,30 @@ import { WordCountSettingTab } from './settings-tab';
 export default class WordCountCalendarPlugin extends Plugin {
     settings: WordCountSettings;
     wordCounter: WordCounter;
+    focusTracker: FocusTimeTracker;
     statusBarItem: HTMLElement;
     todayWordCount: number = 0;
 
     /**
-     * WPM计算器
+     * 码字速度计算器
      */
-    private wpmCalculator = new WPMCalculator();
+    private wphCalculator = new WPHCalculator();
     private wpmTimer: number | null = null;
     private settingsSaveTimer: number | null = null;
+    private wordCountFlushTimer: number | null = null;
+    private pendingWordUpdates = new Map<string, PendingWordUpdate>();
+    private frontmatterWriteQueues = new Map<string, Promise<void>>();
+    private fileModifyQueues = new Map<string, Promise<void>>();
+    private ignoredModifyUntil = new Map<string, number>();
+    private recentLargeDeletions = new Map<string, { time: number; amount: number }>();
+    private unloading = false;
+
+    /**
+     * 获取当前码字速度（字/时）
+     */
+    getCurrentWPH(): number {
+        return this.wphCalculator.getWPH();
+    }
 
     async onload() {
         console.log('加载字数统计日历插件');
@@ -28,6 +60,16 @@ export default class WordCountCalendarPlugin extends Plugin {
 
         // 初始化字数统计器
         this.wordCounter = new WordCounter(this.app, this.settings);
+
+        // 初始化专注时长统计。专注数据使用独立文件保存，避免与高频变化的字数缓存互相覆盖。
+        this.focusTracker = new FocusTimeTracker(
+            this,
+            () => this.settings.focusTrackingEnabled,
+            () => this.settings.focusStrictMode,
+            () => this.settings.focusWriteProperties,
+            () => this.updateStatusBar()
+        );
+        await this.focusTracker.start();
 
         // 注册日历视图
         this.registerView(
@@ -40,6 +82,10 @@ export default class WordCountCalendarPlugin extends Plugin {
             this.activateView();
         });
 
+        this.addRibbonIcon('timer', '专注时长统计', () => {
+            this.activateFocusView();
+        });
+
         // 添加命令
         this.addCommand({
             id: 'open-word-count-calendar',
@@ -49,11 +95,42 @@ export default class WordCountCalendarPlugin extends Plugin {
             }
         });
 
+        this.addCommand({
+            id: 'open-focus-time-statistics',
+            name: '打开专注时长统计',
+            callback: () => {
+                this.activateFocusView();
+            }
+        });
+
+        this.addCommand({
+            id: 'rebuild-focus-properties',
+            name: '从专注账本重建笔记属性',
+            callback: () => {
+                void this.focusTracker.rebuildProperties();
+            }
+        });
+
+        // Add "设置专注时长" to the file context menu (editor "more-options" button,
+        // file explorer right-click). Lets the user fix a file whose focus duration was
+        // inflated by inherited history.
+        this.registerEvent(
+            this.app.workspace.on('file-menu', (menu, file) => {
+                if (!(file instanceof TFile) || file.extension !== 'md') return;
+                menu.addItem(item => {
+                    item.setTitle('设置专注时长')
+                        .setIcon('timer')
+                        .onClick(() => void this.openFocusDurationModal(file));
+                });
+            })
+        );
+
         // 监听文件修改
         this.registerEvent(
             this.app.vault.on('modify', async (file) => {
                 if (file instanceof TFile && file.extension === 'md') {
-                    await this.onFileModified(file);
+                    if (this.shouldIgnoreManagedModify(file.path)) return;
+                    await this.queueFileModified(file);
                 }
             })
         );
@@ -91,11 +168,11 @@ export default class WordCountCalendarPlugin extends Plugin {
             this.updateTodayWordCount();
         }, 1000); // 延迟 1 秒
 
-        // 启动定时器，每2秒刷新一次状态栏（用于WPM衰减）
+        // 启动定时器，每2秒刷新一次状态栏（用于速度衰减）
         this.registerInterval(
             window.setInterval(() => {
-                const wpm = this.wpmCalculator.getWPM();
-                if (wpm > 0 || this.statusBarItem.getText().includes('🚀')) {
+                const wph = this.wphCalculator.getWPH();
+                if (wph > 0 || this.statusBarItem.getText().includes('🚀')) {
                     this.updateStatusBar();
                 }
             }, 2000)
@@ -103,6 +180,19 @@ export default class WordCountCalendarPlugin extends Plugin {
     }
 
     onunload() {
+        this.unloading = true;
+        if (this.wordCountFlushTimer !== null) {
+            window.clearTimeout(this.wordCountFlushTimer);
+            this.wordCountFlushTimer = null;
+        }
+        // Obsidian 不会等待插件的异步 onunload。退出阶段不再发起任何文件写入，
+        // 宁可舍弃最后几秒尚未落盘的统计，也不能让进程在写入中途退出。
+        this.pendingWordUpdates.clear();
+        if (this.settingsSaveTimer !== null) {
+            window.clearTimeout(this.settingsSaveTimer);
+            this.settingsSaveTimer = null;
+        }
+        this.focusTracker?.prepareForUnload();
         console.log('卸载字数统计日历插件');
     }
 
@@ -216,25 +306,7 @@ export default class WordCountCalendarPlugin extends Plugin {
         const path = folder ? `${folder}/${dateStr}.md` : `${dateStr}.md`;
 
         try {
-            let content = '';
-
-            // 如果设置了模板，则读取模板内容
-            if (this.settings.dailyNoteTemplate) {
-                const templateFile = this.getTemplateFile(this.settings.dailyNoteTemplate);
-                if (templateFile) {
-                    content = await this.app.vault.read(templateFile);
-                    // 替换日期占位符
-                    content = content.replace(/\{\{date\}\}/g, dateStr);
-                } else {
-                    // 模板文件不存在，使用默认内容
-                    console.warn(`模板文件不存在: ${this.settings.dailyNoteTemplate}，使用默认模板`);
-                    content = `---\n码字数: 0\n---\n# ${dateStr}\n\n`;
-                }
-            } else {
-                // 使用默认模板
-                content = `---\n码字数: 0\n---\n# ${dateStr}\n\n`;
-            }
-
+            const content = await this.getDailyNoteTemplateContent(dateStr);
             const file = await this.app.vault.create(path, content);
             return file;
         } catch (e) {
@@ -258,17 +330,262 @@ export default class WordCountCalendarPlugin extends Plugin {
     /**
      * 向日记增加字数
      */
-    async addWordCountToDailyNote(dateStr: string, increment: number): Promise<void> {
+    async addWordCountToDailyNote(dateStr: string, increment: number, sourceFile?: TFile): Promise<void> {
+        await this.applyWordCountToDailyNote(
+            dateStr,
+            increment,
+            sourceFile ? [sourceFile] : []
+        );
+    }
+
+    /**
+     * 安全、串行地更新 Markdown 属性。
+     * 若属性更新意外清空了原本存在的正文，则自动把写入前正文拼回去。
+     */
+    async processFrontMatterSafely(
+        file: TFile,
+        mutate: (frontmatter: FrontmatterRecord) => void,
+        protectBody = true
+    ): Promise<void> {
+        if (this.unloading) return;
+        const previous = this.frontmatterWriteQueues.get(file.path) ?? Promise.resolve();
+        const current = previous
+            .catch(error => {
+                console.error(`等待属性写入队列失败: ${file.path}`, error);
+            })
+            .then(async () => {
+                if (this.unloading) return;
+                const originalBefore = await this.app.vault.read(file);
+                if (this.unloading) return;
+                const repair = await this.repairResetDailyNote(file, originalBefore);
+                if (this.unloading) return;
+                const before = repair.content;
+                const beforeParts = this.splitFrontmatter(before);
+
+                this.markManagedModify(file.path);
+                await this.app.fileManager.processFrontMatter(file, frontmatter => {
+                    Object.entries(repair.preservedProperties).forEach(([key, value]) => {
+                        (frontmatter as FrontmatterRecord)[key] = value;
+                    });
+                    mutate(frontmatter as FrontmatterRecord);
+                });
+
+                if (!protectBody || !beforeParts.body.trim()) return;
+
+                const after = await this.app.vault.read(file);
+                const afterParts = this.splitFrontmatter(after);
+                if (afterParts.body.trim()) return;
+
+                const restored = afterParts.frontmatter
+                    ? `${afterParts.frontmatter}${beforeParts.body}`
+                    : before;
+                this.markManagedModify(file.path);
+                await this.app.vault.modify(file, restored);
+                console.error(`属性写入曾清空正文，已自动恢复: ${file.path}`);
+                new Notice(`已阻止属性写入清空正文：${file.basename}`);
+            });
+
+        this.frontmatterWriteQueues.set(file.path, current);
+        try {
+            await current;
+        } finally {
+            if (this.frontmatterWriteQueues.get(file.path) === current) {
+                this.frontmatterWriteQueues.delete(file.path);
+            }
+        }
+    }
+
+    private async applyWordCountToDailyNote(
+        dateStr: string,
+        increment: number,
+        sourceFiles: TFile[]
+    ): Promise<void> {
         const dailyNote = await this.getOrCreateDailyNote(dateStr);
         if (!dailyNote) {
             console.log(`无法创建日记: ${dateStr}`);
             return;
         }
 
-        await this.app.fileManager.processFrontMatter(dailyNote, (frontmatter) => {
-            const current = frontmatter['码字数'] || 0;
-            frontmatter['码字数'] = current + increment;
+        await this.processFrontMatterSafely(dailyNote, frontmatter => {
+            const rawCurrent = frontmatter['码字数'];
+            const current = typeof rawCurrent === 'number' ? rawCurrent : 0;
+            // 计入删除，但最小值为 0（不允许负数）
+            frontmatter['码字数'] = Math.max(0, current + increment);
+
+            let related = this.normalizeRelatedLinks(frontmatter['related']);
+            sourceFiles.forEach(sourceFile => {
+                const link = `[[${sourceFile.basename}]]`;
+                if (!related.includes(link)) {
+                    related.push(link);
+                }
+            });
+            if (sourceFiles.length > 0) {
+                frontmatter['related'] = related;
+            }
         });
+    }
+
+    private enqueueWordCountUpdate(dateStr: string, increment: number, sourceFile: TFile): void {
+        if (this.unloading) return;
+        const pending = this.pendingWordUpdates.get(dateStr) ?? {
+            increment: 0,
+            sourceFiles: new Map<string, TFile>()
+        };
+        pending.increment += increment;
+        pending.sourceFiles.set(sourceFile.path, sourceFile);
+        this.pendingWordUpdates.set(dateStr, pending);
+
+        if (this.wordCountFlushTimer === null) {
+            this.wordCountFlushTimer = window.setTimeout(() => {
+                this.wordCountFlushTimer = null;
+                void this.flushPendingWordCountUpdates();
+            }, WORD_COUNT_FLUSH_INTERVAL_MS);
+        }
+    }
+
+    private async flushPendingWordCountUpdates(): Promise<void> {
+        if (this.unloading) {
+            this.pendingWordUpdates.clear();
+            return;
+        }
+        if (this.pendingWordUpdates.size === 0) return;
+
+        const updates = Array.from(this.pendingWordUpdates.entries());
+        this.pendingWordUpdates.clear();
+
+        for (const [dateStr, update] of updates) {
+            if (update.increment === 0 && update.sourceFiles.size === 0) continue;
+            try {
+                await this.applyWordCountToDailyNote(
+                    dateStr,
+                    update.increment,
+                    Array.from(update.sourceFiles.values())
+                );
+            } catch (error) {
+                const retry = this.pendingWordUpdates.get(dateStr) ?? {
+                    increment: 0,
+                    sourceFiles: new Map<string, TFile>()
+                };
+                retry.increment += update.increment;
+                update.sourceFiles.forEach((file, path) => retry.sourceFiles.set(path, file));
+                this.pendingWordUpdates.set(dateStr, retry);
+                console.error(`批量写入日记字数失败，将在下次重试: ${dateStr}`, error);
+            }
+        }
+
+        await this.updateTodayWordCount();
+        this.refreshCalendarView();
+    }
+
+    private getDefaultDailyNoteContent(dateStr: string): string {
+        return `---\n码字数: 0\nrelated: []\n---\n# ${dateStr}\n\n`;
+    }
+
+    private async getDailyNoteTemplateContent(dateStr: string): Promise<string> {
+        if (!this.settings.dailyNoteTemplate) {
+            return this.getDefaultDailyNoteContent(dateStr);
+        }
+
+        const templateFile = this.getTemplateFile(this.settings.dailyNoteTemplate);
+        if (!templateFile) {
+            console.warn(`模板文件不存在: ${this.settings.dailyNoteTemplate}，使用默认模板`);
+            return this.getDefaultDailyNoteContent(dateStr);
+        }
+
+        const content = await this.app.vault.read(templateFile);
+        if (!content.trim()) {
+            console.warn(`模板文件为空: ${this.settings.dailyNoteTemplate}，使用默认模板`);
+            return this.getDefaultDailyNoteContent(dateStr);
+        }
+        return content.replace(/\{\{date\}\}/g, dateStr);
+    }
+
+    private async repairResetDailyNote(
+        file: TFile,
+        currentContent: string
+    ): Promise<{ content: string; preservedProperties: FrontmatterRecord }> {
+        // Disabled: auto-repair is too aggressive and can destroy user content.
+        // The original logic would overwrite any daily note that had only plugin-managed
+        // properties, even if the note body was intentionally left blank by the user.
+        // This caused data loss when legitimate content was accidentally cleared.
+        return { content: currentContent, preservedProperties: {} };
+    }
+
+    private getDailyNoteDate(file: TFile): string | null {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(file.basename)) return null;
+
+        const configuredPath = this.settings.dailyNotePaths[file.basename];
+        if (configuredPath === file.path) return file.basename;
+
+        const folder = this.settings.dailyNotesFolder || '';
+        const expectedPath = folder
+            ? `${folder}/${file.basename}.md`
+            : `${file.basename}.md`;
+        return file.path === expectedPath ? file.basename : null;
+    }
+
+    private parseFrontmatterProperties(content: string): FrontmatterRecord {
+        const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(content);
+        if (!match) return {};
+        try {
+            const parsed = parseYaml(match[1]);
+            return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? parsed as FrontmatterRecord
+                : {};
+        } catch (error) {
+            console.warn('无法解析疑似被重置日记的属性，跳过自动模板恢复:', error);
+            return {};
+        }
+    }
+
+    private normalizeRelatedLinks(value: unknown): string[] {
+        if (Array.isArray(value)) {
+            return value.filter((item): item is string => typeof item === 'string');
+        }
+        return typeof value === 'string' ? [value] : [];
+    }
+
+    private splitFrontmatter(content: string): { frontmatter: string; body: string } {
+        const match = /^---(?:\r?\n|$)[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(content);
+        if (!match) return { frontmatter: '', body: content };
+        return {
+            frontmatter: match[0],
+            body: content.slice(match[0].length)
+        };
+    }
+
+    private markManagedModify(path: string): void {
+        this.ignoredModifyUntil.set(path, Date.now() + MANAGED_MODIFY_IGNORE_MS);
+    }
+
+    private shouldIgnoreManagedModify(path: string): boolean {
+        const ignoreUntil = this.ignoredModifyUntil.get(path) ?? 0;
+        if (ignoreUntil <= Date.now()) {
+            this.ignoredModifyUntil.delete(path);
+            return false;
+        }
+        return true;
+    }
+
+    private async queueFileModified(file: TFile): Promise<void> {
+        const previous = this.fileModifyQueues.get(file.path) ?? Promise.resolve();
+        const current = previous
+            .catch(error => {
+                console.error(`等待字数统计队列失败: ${file.path}`, error);
+            })
+            .then(() => this.onFileModified(file))
+            .catch(error => {
+                console.error(`统计文件字数失败: ${file.path}`, error);
+            });
+
+        this.fileModifyQueues.set(file.path, current);
+        try {
+            await current;
+        } finally {
+            if (this.fileModifyQueues.get(file.path) === current) {
+                this.fileModifyQueues.delete(file.path);
+            }
+        }
     }
 
     /**
@@ -277,11 +594,15 @@ export default class WordCountCalendarPlugin extends Plugin {
     updateStatusBar() {
         if (!this.statusBarItem) return;
 
-        const wpm = this.wpmCalculator.getWPM();
+        const wph = this.wphCalculator.getWPH();
         let text = `今日码字: ${this.todayWordCount}`;
 
-        if (wpm > 0) {
-            text += ` | 🚀 ${wpm} 字/分`;
+        if (wph > 0) {
+            text += ` | 🚀 ${wph} 字/时`;
+        }
+
+        if (this.focusTracker && this.settings.focusTrackingEnabled) {
+            text += ` | ⏱ ${formatFocusDuration(this.focusTracker.getTodayDuration())}`;
         }
 
         this.statusBarItem.setText(text);
@@ -330,47 +651,104 @@ export default class WordCountCalendarPlugin extends Plugin {
     }
 
     /**
+     * 打开同一侧边栏视图中的专注统计标签页
+     */
+    async activateFocusView(): Promise<void> {
+        await this.activateView();
+        const leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_CALENDAR)[0];
+        if (leaf?.view instanceof CalendarView) {
+            leaf.view.showFocusTab();
+        }
+    }
+
+    /**
+     * 手动设置某篇笔记的累计专注时长。清除该文件继承来的历史事件，重置为用户输入的值。
+     */
+    private async openFocusDurationModal(file: TFile): Promise<void> {
+        const currentMs = this.focusTracker.getFileDuration(file);
+        const minutes = await new FocusDurationInputModal(
+            this.app,
+            file.basename,
+            currentMs
+        ).waitForInput();
+        if (minutes === null) return;
+
+        const targetMs = Math.round(minutes * 60_000);
+        await this.focusTracker.setFocusDuration(file, targetMs);
+        new Notice(`「${file.basename}」专注时长已设为 ${formatFocusDuration(targetMs)}`);
+    }
+
+    /**
      * 文件修改时的处理 - 增量统计
      */
     private async onFileModified(file: TFile) {
+        if (this.unloading) return;
+        if (this.shouldIgnoreManagedModify(file.path)) {
+            return;
+        }
+        if (file.path.startsWith('components/view/relationship-dashboard/')) {
+            return;
+        }
         if (!this.wordCounter.shouldCountFile(file)) {
             return;
         }
 
         const today = this.getDateString(new Date());
         const currentCount = await this.wordCounter.countWords(file);
+        const hasCachedCount = Object.prototype.hasOwnProperty.call(
+            this.settings.wordCountCache,
+            file.path
+        );
         const cache = this.wordCounter.getCachedWordCount(file, this.settings);
 
         // 🔑 核心逻辑：首次检测到文件时，只记录基线
-        if (cache.lastCount === 0) {
+        if (!hasCachedCount) {
             this.wordCounter.updateCache(file, currentCount, today, this.settings);
-            await this.saveSettings();
+            void this.saveSettings();
             return;
         }
 
         // 计算增量
-        let increment = currentCount - cache.lastCount;
+        const increment = currentCount - cache.lastCount;
 
-        // WPM 统计（只统计正增长）
-        if (increment > 0) {
-            this.wpmCalculator.add(increment);
+        const PASTE_THRESHOLD = 100;
+        const DELETION_WINDOW_MS = 60_000; // 60-second window after large deletion
+
+        // Check if there was a recent large deletion
+        const recentDeletion = this.recentLargeDeletions.get(file.path);
+        const now = Date.now();
+        const hasRecentDeletion = recentDeletion && (now - recentDeletion.time < DELETION_WINDOW_MS);
+
+        // Record large deletions
+        if (increment < -PASTE_THRESHOLD) {
+            this.recentLargeDeletions.set(file.path, { time: now, amount: -increment });
+        }
+
+        // Determine if this is a paste that should be ignored
+        // Allow paste if it follows a recent large deletion (likely delete + paste workflow)
+        const isPaste = increment > PASTE_THRESHOLD && !hasRecentDeletion;
+
+        // Clear deletion record after use
+        if (hasRecentDeletion && increment > 0) {
+            this.recentLargeDeletions.delete(file.path);
+        }
+
+        // 速度统计（只统计正增长，且非粘贴）
+        if (increment > 0 && !isPaste) {
+            this.wphCalculator.add(increment);
             // 立即更新状态栏，让他跳动起来
             this.updateStatusBar();
         }
 
-        // 删除阈值逻辑
-        if (increment < -100) {
-            increment = 0;
-        }
-
-        // 更新缓存
+        // 更新缓存（always update baseline, even for pastes）
         this.wordCounter.updateCache(file, currentCount, today, this.settings);
-        await this.saveSettings();
+        void this.saveSettings();
 
-        // 写入日记
-        if (increment !== 0) {
-            await this.addWordCountToDailyNote(today, increment);
-            await this.updateTodayWordCount();
+        // 批量写入日记（粘贴产生的增量不计入，只记录手工输入/删除）
+        if (increment !== 0 && !isPaste) {
+            this.enqueueWordCountUpdate(today, increment, file);
+            this.todayWordCount = Math.max(0, this.todayWordCount + increment);
+            this.updateStatusBar();
         }
 
         this.refreshCalendarView();
@@ -380,13 +758,16 @@ export default class WordCountCalendarPlugin extends Plugin {
      * 文件创建时的处理
      */
     private async onFileCreated(file: TFile) {
+        if (file.path.startsWith('components/view/relationship-dashboard/')) {
+            return;
+        }
         if (!this.wordCounter.shouldCountFile(file)) {
             return;
         }
 
         const today = this.getDateString(new Date());
         this.wordCounter.updateCache(file, 0, today, this.settings);
-        await this.saveSettings();
+        void this.saveSettings();
     }
 
     /**
@@ -450,6 +831,16 @@ export default class WordCountCalendarPlugin extends Plugin {
         if (typeof this.settings.dailyNoteTemplate === 'undefined') {
             this.settings.dailyNoteTemplate = DEFAULT_SETTINGS.dailyNoteTemplate;
         }
+
+        if (typeof this.settings.focusTrackingEnabled === 'undefined') {
+            this.settings.focusTrackingEnabled = DEFAULT_SETTINGS.focusTrackingEnabled;
+        }
+        if (typeof this.settings.focusStrictMode === 'undefined') {
+            this.settings.focusStrictMode = DEFAULT_SETTINGS.focusStrictMode;
+        }
+        if (typeof this.settings.focusWriteProperties === 'undefined') {
+            this.settings.focusWriteProperties = DEFAULT_SETTINGS.focusWriteProperties;
+        }
     }
 
     /**
@@ -490,6 +881,7 @@ export default class WordCountCalendarPlugin extends Plugin {
      * 保存设置（延迟保存，避免频繁写入）
      */
     async saveSettings() {
+        if (this.unloading) return;
         // 清除之前的定时器
         if (this.settingsSaveTimer !== null) {
             window.clearTimeout(this.settingsSaveTimer);
@@ -504,12 +896,93 @@ export default class WordCountCalendarPlugin extends Plugin {
 }
 
 /**
- * WPM 计算辅助类
- * 使用滑动窗口算法计算最近60秒的输入速度
+ * 手动输入专注时长（分钟）的弹窗。确认返回分钟数，取消/关闭返回 null。
  */
-class WPMCalculator {
+class FocusDurationInputModal extends Modal {
+    private settled = false;
+    private resolveFn: ((minutes: number | null) => void) | null = null;
+
+    constructor(
+        app: App,
+        private readonly displayName: string,
+        private readonly currentMs: number
+    ) {
+        super(app);
+    }
+
+    waitForInput(): Promise<number | null> {
+        return new Promise(resolve => {
+            this.resolveFn = resolve;
+            this.open();
+        });
+    }
+
+    private settle(value: number | null): void {
+        if (this.settled) return;
+        this.settled = true;
+        this.resolveFn?.(value);
+        this.close();
+    }
+
+    onOpen(): void {
+        this.titleEl.setText('设置专注时长');
+        const currentMinutes = Math.round(this.currentMs / 60_000);
+
+        const setting = new Setting(this.contentEl)
+            .setName(`「${this.displayName}」专注时长（分钟）`)
+            .setDesc(
+                `当前：${formatFocusDuration(this.currentMs)}（约 ${currentMinutes} 分钟）。输入 0 即清除全部专注记录。`
+            );
+        const input = setting.controlEl.createEl('input', { type: 'number' });
+        input.value = String(currentMinutes);
+        input.min = '0';
+        input.step = '1';
+        input.style.width = '100px';
+
+        const confirmBtn = this.contentEl.createEl('button', { text: '确认', cls: 'mod-cta' });
+        confirmBtn.style.marginTop = '12px';
+        confirmBtn.addEventListener('click', () => {
+            const minutes = Number(input.value);
+            if (!Number.isFinite(minutes) || minutes < 0) {
+                new Notice('请输入有效的非负数字');
+                return;
+            }
+            this.settle(minutes);
+        });
+
+        const cancelBtn = this.contentEl.createEl('button', { text: '取消' });
+        cancelBtn.style.marginLeft = '8px';
+        cancelBtn.addEventListener('click', () => this.settle(null));
+
+        input.focus();
+        input.select();
+        input.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                confirmBtn.click();
+            } else if (event.key === 'Escape') {
+                this.settle(null);
+            }
+        });
+    }
+
+    onClose(): void {
+        // Closing the modal counts as cancel.
+        if (!this.settled) {
+            this.settled = true;
+            this.resolveFn?.(null);
+        }
+        this.contentEl.empty();
+    }
+}
+
+/**
+ * 码字速度计算辅助类
+ * 使用 60 秒滑动窗口统计输入量，外推为每小时字数
+ */
+class WPHCalculator {
     private history: { time: number; count: number }[] = [];
-    private readonly WINDOW_MS = 60 * 1000; // 60秒窗口
+    private readonly WINDOW_MS = 60 * 1000; // 60-second sliding window
 
     /**
      * 添加输入记录
@@ -520,14 +993,14 @@ class WPMCalculator {
     }
 
     /**
-     * 获取当前 WPM
+     * 获取当前码字速度（字/时）
      */
-    getWPM(): number {
+    getWPH(): number {
         const now = Date.now();
         // 移除过期数据（滑出窗口）
         this.history = this.history.filter(item => now - item.time < this.WINDOW_MS);
 
-        // 计算窗口内总字数
-        return this.history.reduce((sum, item) => sum + item.count, 0);
+        // 60 秒窗口内字数 × 60 = 字/时
+        return this.history.reduce((sum, item) => sum + item.count, 0) * 60;
     }
 }

@@ -33,6 +33,11 @@ export interface WordCountSettings {
 
     // 日记模板配置
     dailyNoteTemplate: string;  // 日记模板文件路径
+
+    // 专注时长配置
+    focusTrackingEnabled: boolean;
+    focusStrictMode: boolean;
+    focusWriteProperties: boolean;
 }
 
 export const DEFAULT_SETTINGS: WordCountSettings = {
@@ -54,5 +59,10 @@ export const DEFAULT_SETTINGS: WordCountSettings = {
     cellSize: 45,
 
     // 默认日记模板（留空表示不使用模板）
-    dailyNoteTemplate: ''
+    dailyNoteTemplate: '',
+
+    // 默认统计专注时长；严格模式下切到其他窗口会暂停
+    focusTrackingEnabled: true,
+    focusStrictMode: true,
+    focusWriteProperties: true
 }

@@ -70,6 +70,66 @@ export class WordCountSettingTab extends PluginSettingTab {
                     }
                 }));
 
+        containerEl.createEl('h2', { text: '专注时长统计' });
+
+        new Setting(containerEl)
+            .setName('启用专注时长统计')
+            .setDesc('统计当前打开笔记的专注时长，并在状态栏和统计视图中显示。')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.focusTrackingEnabled)
+                .onChange(async (value) => {
+                    this.plugin.focusTracker?.captureNow();
+                    this.plugin.settings.focusTrackingEnabled = value;
+                    this.plugin.focusTracker?.syncTrackingState();
+                    await this.plugin.saveSettings();
+                    this.plugin.updateStatusBar();
+                    this.plugin.refreshCalendarView();
+                }));
+
+        new Setting(containerEl)
+            .setName('严格模式')
+            .setDesc('开启后，Obsidian 窗口失去焦点时暂停计时。')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.focusStrictMode)
+                .onChange(async (value) => {
+                    this.plugin.focusTracker?.captureNow();
+                    this.plugin.settings.focusStrictMode = value;
+                    this.plugin.focusTracker?.syncTrackingState();
+                    await this.plugin.saveSettings();
+                    this.plugin.updateStatusBar();
+                }));
+
+        new Setting(containerEl)
+            .setName('同步专注数据到笔记属性')
+            .setDesc('把账本计算结果写入对应笔记的“累计专注秒”和日记的“当日专注秒”。账本仍是唯一原始数据。')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.focusWriteProperties)
+                .onChange(async (value) => {
+                    this.plugin.settings.focusWriteProperties = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('重建专注属性')
+            .setDesc('根据事件账本重新计算已有笔记和已有日记的专注属性，不会创建历史日记。')
+            .addButton(button => button
+                .setButtonText('开始重建')
+                .onClick(async () => {
+                    button.setDisabled(true);
+                    button.setButtonText('重建中…');
+                    await this.plugin.focusTracker.rebuildProperties();
+                    button.setButtonText('重建完成');
+                    window.setTimeout(() => {
+                        button.setDisabled(false);
+                        button.setButtonText('开始重建');
+                    }, 1500);
+                }));
+
+        const focusStorageDesc = containerEl.createDiv({ cls: 'word-count-color-description' });
+        focusStorageDesc.createEl('p', {
+            text: 'focus-time-data.json 保存带唯一 ID 的专注事件账本；属性只是可重建汇总。账本会维护备份、合并同步冲突，并在首次运行时转换旧 focus-time 数据。'
+        });
+
         // 格子颜色设置组
         containerEl.createEl('h2', { text: '格子颜色设置' });
 

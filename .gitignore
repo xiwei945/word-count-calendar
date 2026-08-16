@@ -6,9 +6,15 @@ dist/
 build/
 *.js.map
 
-# Obsidian
+# Obsidian runtime data
 data.json
+focus-time-data*
+focus-time-backups/
 *.log
+
+# Local agent/IDE configuration
+.claude/
+.agents/
 
 # IDE
 .vscode/
