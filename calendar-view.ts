@@ -105,6 +105,10 @@ export class CalendarView extends ItemView {
     private monthPickerTrigger: HTMLButtonElement | null = null;
     private monthPickerOutsideHandler: ((event: PointerEvent) => void) | null = null;
     private previousFocusPeriod: FocusLeaderboardPeriod | null = null;
+    private calendarContainer: HTMLElement | null = null;
+    private contentContainer: HTMLElement | null = null;
+    private renderedTab: TabType | null = null;
+    private focusLeaderboardContainer: HTMLElement | null = null;
 
     constructor(leaf: WorkspaceLeaf, plugin: WordCountCalendarPlugin) {
         super(leaf);
@@ -176,20 +180,37 @@ export class CalendarView extends ItemView {
     render(): void {
         this.stopLiveUpdates();
         this.resetViewReferences();
-        const container = this.containerEl.children[1] as HTMLElement;
-        container.empty();
-        container.addClass('word-count-calendar-container');
+        const container = this.calendarContainer
+            ?? (this.containerEl.children[1] as HTMLElement);
+        const tabChanged = this.renderedTab !== this.currentTab;
+        if (!this.calendarContainer) {
+            this.calendarContainer = container;
+            container.empty();
+            container.addClass('word-count-calendar-container');
+        }
 
-        // 设置格子大小 CSS 变量
         container.setCssProps({
             '--calendar-cell-size': `${this.plugin.settings.cellSize}px`
         });
 
-        // 渲染标签导航
-        this.renderTabNavigation(container);
+        const tabNav = container.querySelector('.tab-navigation');
+        if (!tabNav || tabChanged) {
+            tabNav?.remove();
+            this.renderTabNavigation(container);
+        }
+        if (!this.contentContainer) {
+            this.contentContainer = container.createDiv({ cls: 'tab-content-container' });
+        }
 
-        // 渲染内容区域
-        const contentContainer = container.createDiv({ cls: 'tab-content-container' });
+        const contentContainer = this.contentContainer;
+        if (!contentContainer) return;
+        const currentTabNav = container.querySelector('.tab-navigation');
+        if (currentTabNav && currentTabNav.nextElementSibling !== contentContainer) {
+            container.insertBefore(currentTabNav, contentContainer);
+        }
+        contentContainer.empty();
+        this.focusLeaderboardContainer = null;
+        this.renderedTab = this.currentTab;
 
         switch (this.currentTab) {
             case TabType.CALENDAR:
@@ -877,7 +898,10 @@ export class CalendarView extends ItemView {
         });
 
         this.renderTodaySpeedChart(todayDetailContainer);
-
+        if (this.wphHistory.length === 0) {
+            this.appendTodaySpeedSample(this.plugin.getCurrentWPH());
+        }
+        this.drawTodaySpeedChart();
         this.startTodayDetailUpdates();
     }
 
@@ -934,13 +958,16 @@ export class CalendarView extends ItemView {
         footer.createSpan({ text: '刚才' });
         footer.createSpan({ text: '实时 60 秒窗口' });
         footer.createSpan({ text: '现在' });
-        this.updateTodaySpeedChart(this.plugin.getCurrentWPH());
+        this.drawTodaySpeedChart();
     }
 
-    private updateTodaySpeedChart(wph: number): void {
+    private appendTodaySpeedSample(wph: number): void {
         this.wphHistory.push(Math.max(0, wph));
         if (this.wphHistory.length > 60) this.wphHistory.shift();
+    }
 
+    private drawTodaySpeedChart(): void {
+        const wph = this.wphHistory[this.wphHistory.length - 1] || 0;
         const values = this.wphHistory.length > 1
             ? this.wphHistory
             : [this.wphHistory[0] || 0, this.wphHistory[0] || 0];
@@ -1012,7 +1039,7 @@ export class CalendarView extends ItemView {
      */
     private startTodayDetailUpdates(): void {
         // 立即更新一次
-        this.updateTodayDetail();
+        this.updateTodayDetail(false);
 
         this.detailUpdateTimer = window.setInterval(() => {
             this.updateTodayDetail();
@@ -1029,7 +1056,7 @@ export class CalendarView extends ItemView {
     /**
      * 更新今日详情页面的数据
      */
-    private updateTodayDetail(): void {
+    private updateTodayDetail(sampleSpeed = true): void {
         if (this.currentTab !== TabType.TODAY) return;
 
         const newCount = this.plugin.todayWordCount;
@@ -1060,7 +1087,8 @@ export class CalendarView extends ItemView {
         if (this.wphDisplay) {
             const wph = this.plugin.getCurrentWPH();
             this.wphDisplay.textContent = wph > 0 ? `${wph} 字/时` : '0 字/时';
-            this.updateTodaySpeedChart(wph);
+            if (sampleSpeed) this.appendTodaySpeedSample(wph);
+            this.drawTodaySpeedChart();
 
             if (wph > 0) {
                 this.wphDisplay.addClass('active');
@@ -1070,10 +1098,18 @@ export class CalendarView extends ItemView {
         }
     }
 
+    private refreshFocusContent(container: HTMLElement): void {
+        this.stopLiveUpdates();
+        this.resetViewReferences();
+        container.empty();
+        this.focusLeaderboardContainer = container;
+        this.renderFocusContent(container);
+    }
     /**
      * 渲染专注时长汇总和笔记排行榜
      */
     private renderFocusContent(container: HTMLElement): void {
+        this.focusLeaderboardContainer = container;
         const focusContainer = container.createDiv({ cls: 'focus-detail-container' });
 
         if (!this.plugin.settings.focusTrackingEnabled) {
@@ -1159,7 +1195,11 @@ export class CalendarView extends ItemView {
                 if (option.value === this.focusLeaderboardPeriod) return;
                 this.previousFocusPeriod = this.focusLeaderboardPeriod;
                 this.focusLeaderboardPeriod = option.value;
-                this.render();
+                if (this.focusLeaderboardContainer) {
+                    this.refreshFocusContent(this.focusLeaderboardContainer);
+                } else {
+                    this.render();
+                }
             };
         });
         this.previousFocusPeriod = null;
