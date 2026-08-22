@@ -99,6 +99,11 @@ function isTransientBasename(basename: string): boolean {
     return lower === '未命名' || lower === 'untitled' || lower === '无标题';
 }
 
+function isTransientPath(path: string): boolean {
+    const filename = path.split('/').pop() ?? '';
+    return isTransientBasename(filename.replace(/\.[^.]+$/, ''));
+}
+
 function getLocalDateString(timestamp: number): string {
     const date = new Date(timestamp);
     return [
@@ -298,6 +303,7 @@ export function mergeFocusData(base: FocusData, incoming: FocusData): FocusData 
 
     for (const source of [base.events, incoming.events]) {
         Object.entries(source).forEach(([id, event]) => {
+            if (isTransientPath(event.filePath)) return;
             const current = merged.events[id];
             merged.events[id] = current ? mergeEvent(current, event) : { ...event };
         });
@@ -305,6 +311,7 @@ export function mergeFocusData(base: FocusData, incoming: FocusData): FocusData 
 
     for (const source of [base.pathAliases, incoming.pathAliases]) {
         Object.entries(source).forEach(([path, alias]) => {
+            if (isTransientPath(path) || isTransientPath(alias.to)) return;
             const current = merged.pathAliases[path];
             if (
                 !current ||
@@ -318,6 +325,7 @@ export function mergeFocusData(base: FocusData, incoming: FocusData): FocusData 
 
     for (const source of [base.deletedPaths, incoming.deletedPaths]) {
         Object.entries(source).forEach(([path, deletedAt]) => {
+            if (isTransientPath(path)) return;
             const resolvedPath = resolvePath(merged.pathAliases, path);
             merged.deletedPaths[resolvedPath] = Math.max(
                 merged.deletedPaths[resolvedPath] ?? 0,
@@ -834,11 +842,10 @@ export class FocusTimeTracker {
 
         Object.keys(data.events).forEach(id => {
             const filePath = data.events[id].filePath;
-            const filename = filePath.split('/').pop() ?? '';
-            const basename = filename.replace(/\.[^.]+$/, '');
-            if (!isTransientBasename(basename)) return;
-            // Keep events for a real note still named 未命名; only drop orphans.
-            if (this.plugin.app.vault.getFileByPath(normalizePath(filePath))) return;
+            if (!isTransientPath(filePath)) return;
+            // Transient names are excluded from tracking globally, including a
+            // real note currently carrying such a name.
+            data.deletedPaths[filePath] = Math.max(data.deletedPaths[filePath] ?? 0, Date.now());
             delete data.events[id];
             removedEvents++;
         });
@@ -1040,13 +1047,21 @@ export class FocusTimeTracker {
         if (isCurrent) this.captureNow(true);
 
         const resolvedPath = this.resolvePath(file.path);
-        const events = this.store.getData().events;
+        const data = this.store.getData();
+        const events = data.events;
+        const deletedAt = Date.now();
 
         Object.entries(events).forEach(([id, event]) => {
             if (this.resolvePath(event.filePath) === resolvedPath) {
                 delete events[id];
             }
         });
+        // save() merges with the on-disk snapshot. The tombstone prevents the
+        // removed history from being merged back during that reconciliation.
+        data.deletedPaths[resolvedPath] = Math.max(
+            data.deletedPaths[resolvedPath] ?? 0,
+            deletedAt
+        );
 
         if (targetMs > 0) {
             const now = Date.now();
@@ -1267,11 +1282,22 @@ export class FocusTimeTracker {
     }
 
     private handleCreate(file: TFile): void {
-        // Mark the created path as a new identity terminus to prevent inheriting
-        // stale alias chains when a file is recreated at a previously used path.
-        const aliases = this.store.getData().pathAliases;
+        const data = this.store.getData();
         const now = Date.now();
-        aliases[file.path] = { to: file.path, updatedAt: now };
+
+        // Transient names are reused by Obsidian for unrelated notes. They must
+        // never retain aliases or focus history between creations.
+        if (isTransientPath(file.path)) {
+            delete data.pathAliases[file.path];
+            data.deletedPaths[file.path] = Math.max(data.deletedPaths[file.path] ?? 0, now);
+            Object.entries(data.events).forEach(([id, event]) => {
+                if (event.filePath === file.path) delete data.events[id];
+            });
+        } else {
+            // A recreated regular path starts a new identity until it is renamed.
+            data.pathAliases[file.path] = { to: file.path, updatedAt: now };
+        }
+
         void this.store.save();
     }
 
@@ -1306,6 +1332,7 @@ export class FocusTimeTracker {
                     event.date > endDate
                 ) return;
             }
+            if (isTransientPath(event.filePath)) return;
             const filePath = this.resolvePath(event.filePath);
             const record = records.get(filePath) ?? {
                 filePath,
