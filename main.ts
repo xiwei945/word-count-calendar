@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Plugin, Setting, TFile, parseYaml } from 'obsidian';
+import { App, MarkdownView, Modal, Notice, Plugin, Setting, TFile, parseYaml } from 'obsidian';
 import { WordCountSettings, DEFAULT_SETTINGS } from './settings';
 import { WordCounter } from './word-counter';
 import { CalendarView, VIEW_TYPE_CALENDAR } from './calendar-view';
@@ -18,6 +18,18 @@ interface PendingWordUpdate {
 
 const WORD_COUNT_FLUSH_INTERVAL_MS = 2_000;
 const MANAGED_MODIFY_IGNORE_MS = 250;
+
+/**
+ * 表示当前文件不适合被后台属性同步改写。
+ * 调用方应保留本次更新，待下一次安全时机重试。
+ */
+class UnsafeFileWriteError extends Error {
+    constructor(path: string, reason: string) {
+        super(`跳过不安全的 Markdown 写入：${path}（${reason}）`);
+        this.name = 'UnsafeFileWriteError';
+    }
+}
+
 /**
  * 字数统计日历插件主类
  */
@@ -348,34 +360,52 @@ export default class WordCountCalendarPlugin extends Plugin {
             })
             .then(async () => {
                 if (this.unloading) return;
+                // 当前活动编辑器拥有尚未落盘的内存内容。此时调用
+                // processFrontMatter/vault.modify 可能用旧 Vault 快照覆盖用户刚输入的文字。
+                // 直接放弃本次写入，由调用方保留并重试，绝不拿旧快照覆盖编辑器。
+                if (this.isFileBeingEdited(file)) {
+                    throw new UnsafeFileWriteError(file.path, '文件正在活动编辑器中编辑');
+                }
+
                 const originalBefore = await this.app.vault.read(file);
                 if (this.unloading) return;
+                if (this.isFileBeingEdited(file)) {
+                    throw new UnsafeFileWriteError(file.path, '读取后文件进入活动编辑器');
+                }
+
                 const repair = await this.repairResetDailyNote(file, originalBefore);
                 if (this.unloading) return;
                 const before = repair.content;
                 const beforeParts = this.splitFrontmatter(before);
 
+                // 再读一次做乐观并发校验，防止读取快照后被 Obsidian、同步工具或其他插件修改。
+                // processFrontMatter 会重写整个文件，不能接受任何旧快照写回。
+                const latestBefore = await this.app.vault.read(file);
+                if (this.unloading) return;
+                if (latestBefore !== before) {
+                    throw new UnsafeFileWriteError(file.path, '文件在写入前已发生变化');
+                }
+                if (this.isFileBeingEdited(file)) {
+                    throw new UnsafeFileWriteError(file.path, '写入前文件正在活动编辑器中编辑');
+                }
+                if (this.unloading) return;
+
                 this.markManagedModify(file.path);
                 await this.app.fileManager.processFrontMatter(file, frontmatter => {
-                    Object.entries(repair.preservedProperties).forEach(([key, value]) => {
-                        (frontmatter as FrontmatterRecord)[key] = value;
-                    });
+                    // 只能修改 processFrontMatter 回调提供的当前 frontmatter。
+                    // 禁止把此前 vault.read 得到的旧属性或旧正文拼回文件。
                     mutate(frontmatter as FrontmatterRecord);
                 });
 
-                if (!protectBody || !beforeParts.body.trim()) return;
-
+                // 不再自动调用 vault.modify 恢复正文。即使正文异常变化，
+                // 也不能用旧快照覆盖用户内容；记录并让用户从 Obsidian 历史恢复。
+                if (!protectBody || this.unloading) return;
                 const after = await this.app.vault.read(file);
                 const afterParts = this.splitFrontmatter(after);
-                if (afterParts.body.trim()) return;
-
-                const restored = afterParts.frontmatter
-                    ? `${afterParts.frontmatter}${beforeParts.body}`
-                    : before;
-                this.markManagedModify(file.path);
-                await this.app.vault.modify(file, restored);
-                console.error(`属性写入曾清空正文，已自动恢复: ${file.path}`);
-                new Notice(`已阻止属性写入清空正文：${file.basename}`);
+                if (afterParts.body !== beforeParts.body) {
+                    console.error(`属性写入后正文发生变化，未执行自动恢复: ${file.path}`);
+                    new Notice(`检测到正文变化，请检查：${file.basename}`);
+                }
             });
 
         this.frontmatterWriteQueues.set(file.path, current);
@@ -435,6 +465,14 @@ export default class WordCountCalendarPlugin extends Plugin {
         }
     }
 
+    private scheduleWordCountFlushRetry(): void {
+        if (this.unloading || this.wordCountFlushTimer !== null) return;
+        this.wordCountFlushTimer = window.setTimeout(() => {
+            this.wordCountFlushTimer = null;
+            void this.flushPendingWordCountUpdates();
+        }, WORD_COUNT_FLUSH_INTERVAL_MS);
+    }
+
     private async flushPendingWordCountUpdates(): Promise<void> {
         if (this.unloading) {
             this.pendingWordUpdates.clear();
@@ -461,6 +499,7 @@ export default class WordCountCalendarPlugin extends Plugin {
                 retry.increment += update.increment;
                 update.sourceFiles.forEach((file, path) => retry.sourceFiles.set(path, file));
                 this.pendingWordUpdates.set(dateStr, retry);
+                this.scheduleWordCountFlushRetry();
                 console.error(`批量写入日记字数失败，将在下次重试: ${dateStr}`, error);
             }
         }
@@ -542,6 +581,21 @@ export default class WordCountCalendarPlugin extends Plugin {
             frontmatter: match[0],
             body: content.slice(match[0].length)
         };
+    }
+
+    /**
+     * 判断目标文件是否正由当前 Markdown 编辑器持有。
+     * 只要是活动编辑器中的文件，就禁止后台整文件写回。
+     */
+    private isFileBeingEdited(file: TFile): boolean {
+        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        const activeEditor = this.app.workspace.activeEditor;
+        return Boolean(
+            view?.file?.path === file.path &&
+            view.getMode() === 'source' &&
+            activeEditor?.file?.path === file.path &&
+            activeEditor.editor
+        );
     }
 
     private markManagedModify(path: string): void {

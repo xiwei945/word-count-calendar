@@ -1426,43 +1426,33 @@ export class FocusTimeTracker {
         const file = this.plugin.app.vault.getFileByPath(normalizePath(path));
         if (!file || file.extension !== 'md') return false;
 
-        const cache = this.plugin.app.metadataCache.getFileCache(file);
-        const currentProperty: unknown = cache?.frontmatter?.[NOTE_FOCUS_PROPERTY];
-        const calculatedSeconds = Math.round(this.getRecordDuration(path) / 1000);
-
-        // Use max(current, calculated) to respect manual increases while continuing to track.
-        // When force (manual override via setFocusDuration), write calculated directly so
-        // the property can also decrease, not just increase.
-        const finalValue = force
-            ? calculatedSeconds
-            : (typeof currentProperty === 'number'
-                ? Math.max(currentProperty, calculatedSeconds)
-                : calculatedSeconds);
-
-        if (currentProperty === finalValue) return false;
-
+        // 属性值必须在 processFrontMatter 的当前回调中读取，不能使用 metadata
+        // cache 的旧值计算后再异步写回。
+        let changed = false;
         await this.plugin.processFrontMatterSafely(file, frontmatter => {
-            frontmatter[NOTE_FOCUS_PROPERTY] = finalValue;
+            const rawCurrent = frontmatter[NOTE_FOCUS_PROPERTY];
+            const current = typeof rawCurrent === 'number' ? rawCurrent : 0;
+            const calculatedSeconds = Math.round(this.getRecordDuration(path) / 1000);
+            const finalValue = force
+                ? calculatedSeconds
+                : Math.max(current, calculatedSeconds);
+            changed = rawCurrent !== finalValue;
+            if (changed) frontmatter[NOTE_FOCUS_PROPERTY] = finalValue;
         });
-        return true;
+        return changed;
     }
 
     private async writeDailyProjection(date: string, dailyNote: TFile): Promise<boolean> {
-        const cache = this.plugin.app.metadataCache.getFileCache(dailyNote);
-        const currentProperty: unknown = cache?.frontmatter?.[DAILY_FOCUS_PROPERTY];
-        const calculatedSeconds = Math.round(this.getDateDuration(date) / 1000);
-
-        // Use max(current, calculated) to respect manual increases while continuing to track
-        const finalValue = typeof currentProperty === 'number'
-            ? Math.max(currentProperty, calculatedSeconds)
-            : calculatedSeconds;
-
-        if (currentProperty === finalValue) return false;
-
+        let changed = false;
         await this.plugin.processFrontMatterSafely(dailyNote, frontmatter => {
-            frontmatter[DAILY_FOCUS_PROPERTY] = finalValue;
+            const rawCurrent = frontmatter[DAILY_FOCUS_PROPERTY];
+            const current = typeof rawCurrent === 'number' ? rawCurrent : 0;
+            const calculatedSeconds = Math.round(this.getDateDuration(date) / 1000);
+            const finalValue = Math.max(current, calculatedSeconds);
+            changed = rawCurrent !== finalValue;
+            if (changed) frontmatter[DAILY_FOCUS_PROPERTY] = finalValue;
         });
-        return true;
+        return changed;
     }
 
     private async syncPropertyToEvents(path: string, targetDurationMs: number): Promise<void> {
