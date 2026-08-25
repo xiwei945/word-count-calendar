@@ -52,6 +52,8 @@ export default class WordCountCalendarPlugin extends Plugin {
     private fileModifyQueues = new Map<string, Promise<void>>();
     private ignoredModifyUntil = new Map<string, number>();
     private recentLargeDeletions = new Map<string, { time: number; amount: number }>();
+    /** 已计入界面、但尚未安全写回当日日记属性的字数增量。 */
+    private pendingTodayWordCountDelta = 0;
     private unloading = false;
 
     /**
@@ -158,7 +160,7 @@ export default class WordCountCalendarPlugin extends Plugin {
                 const today = this.getDateString(new Date());
                 if (file instanceof TFile && file.basename === today) {
                     void this.updateTodayWordCount();
-                    this.refreshCalendarView();
+                    this.refreshCalendarView(true);
                 }
             })
         );
@@ -172,7 +174,8 @@ export default class WordCountCalendarPlugin extends Plugin {
 
         // 延迟加载，等 Obsidian 完全启动后再执行
         window.setTimeout(() => {
-            void this.updateTodayWordCount();
+            // 启动时以日记属性作为初始基线；之后显示以“已落盘值 + 待写入增量”为准。
+            void this.updateTodayWordCount(true);
         }, 1000); // 延迟 1 秒
 
         // 启动定时器，每2秒刷新一次状态栏（用于速度衰减）
@@ -491,6 +494,10 @@ export default class WordCountCalendarPlugin extends Plugin {
                     update.increment,
                     Array.from(update.sourceFiles.values())
                 );
+                if (dateStr === this.getDateString(new Date())) {
+                    // 属性写入已经成功，原先的乐观增量现在成为日记属性的一部分。
+                    this.pendingTodayWordCountDelta -= update.increment;
+                }
             } catch (error) {
                 const retry = this.pendingWordUpdates.get(dateStr) ?? {
                     increment: 0,
@@ -504,8 +511,10 @@ export default class WordCountCalendarPlugin extends Plugin {
             }
         }
 
-        await this.updateTodayWordCount();
-        this.refreshCalendarView();
+        // 不在这里从 metadata cache 回读。当日记仍在编辑时，cache 可能尚未
+        // 包含刚写入的属性；metadata changed 事件会在可用时完成最终对齐。
+        this.updateStatusBar();
+        this.refreshCalendarView(true);
     }
 
     private getDefaultDailyNoteContent(dateStr: string): string {
@@ -655,15 +664,22 @@ export default class WordCountCalendarPlugin extends Plugin {
     /**
      * 更新今日字数显示（同时更新状态栏）
      */
-    async updateTodayWordCount(): Promise<void> {
+    async updateTodayWordCount(resetPendingDelta = false): Promise<void> {
         const today = this.getDateString(new Date());
         const dailyNote = await this.findDailyNote(today);
 
+        if (resetPendingDelta) {
+            this.pendingTodayWordCountDelta = 0;
+        }
+
         if (dailyNote) {
             const cache = this.app.metadataCache.getFileCache(dailyNote);
-            const wordCount: unknown = cache?.frontmatter?.['码字数'];
-            this.todayWordCount = typeof wordCount === 'number' ? wordCount : 0;
-        } else {
+            const persistedCount: unknown = cache?.frontmatter?.['码字数'];
+            const persisted = typeof persistedCount === 'number' ? persistedCount : 0;
+            // metadata cache 是异步的。编辑期间它可能仍停在旧属性，不能把
+            // 已显示的输入增量覆盖回去；待写入增量会在成功同步后被逐步扣除。
+            this.todayWordCount = Math.max(0, persisted + this.pendingTodayWordCountDelta);
+        } else if (resetPendingDelta) {
             this.todayWordCount = 0;
         }
 
@@ -792,11 +808,12 @@ export default class WordCountCalendarPlugin extends Plugin {
         // 批量写入日记（粘贴产生的增量不计入，只记录手工输入/删除）
         if (increment !== 0 && !isPaste) {
             this.enqueueWordCountUpdate(today, increment, file);
+            this.pendingTodayWordCountDelta += increment;
             this.todayWordCount = Math.max(0, this.todayWordCount + increment);
             this.updateStatusBar();
         }
 
-        this.refreshCalendarView();
+        this.refreshCalendarView(true);
     }
 
     /**
@@ -818,11 +835,11 @@ export default class WordCountCalendarPlugin extends Plugin {
     /**
      * 刷新日历视图
      */
-    refreshCalendarView() {
+    refreshCalendarView(live = false) {
         const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_CALENDAR);
         leaves.forEach(leaf => {
             if (leaf.view instanceof CalendarView) {
-                leaf.view.refresh();
+                leaf.view.refresh(live);
             }
         });
     }
@@ -1030,7 +1047,7 @@ class FocusDurationInputModal extends Modal {
 
 /**
  * 码字速度计算辅助类
- * 使用 60 秒滑动窗口统计输入量，外推为每小时字数
+ * 使用 60 秒滑动窗口统计输入量，外推为每小时字数。
  */
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -1038,7 +1055,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 class WPHCalculator {
     private history: { time: number; count: number }[] = [];
-    private readonly WINDOW_MS = 60 * 1000; // 60-second sliding window
+    private readonly WINDOW_MS = 60 * 1000;
 
     /**
      * 添加输入记录
@@ -1053,10 +1070,7 @@ class WPHCalculator {
      */
     getWPH(): number {
         const now = Date.now();
-        // 移除过期数据（滑出窗口）
         this.history = this.history.filter(item => now - item.time < this.WINDOW_MS);
-
-        // 60 秒窗口内字数 × 60 = 字/时
         return this.history.reduce((sum, item) => sum + item.count, 0) * 60;
     }
 }

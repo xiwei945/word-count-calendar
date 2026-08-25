@@ -829,10 +829,88 @@ export class CalendarView extends ItemView {
     }
 
     /**
-     * 刷新视图
+     * 默认刷新用于设置、切月等结构变化；live 模式只更新已存在的动态数字。
+     * 编辑一篇笔记会持续触发 Vault modify，绝不能每次都 render()，否则侧栏
+     * 会反复销毁并重建 DOM，出现闪烁、丢失焦点和图表抖动。
      */
-    refresh(): void {
-        this.render();
+    refresh(live = false): void {
+        if (!live) {
+            this.render();
+            return;
+        }
+        if (this.currentTab === TabType.TODAY) {
+            this.updateTodayDetail(false);
+            return;
+        }
+        if (this.currentTab === TabType.FOCUS) {
+            this.updateFocusDetail();
+            return;
+        }
+        this.updateTodayCalendarCell();
+    }
+
+    /**
+     * 编辑时只更新当前月的“今天”格子，而非重建整个月视图。
+     */
+    private updateTodayCalendarCell(): void {
+        if (this.currentTab !== TabType.CALENDAR) return;
+
+        const today = new Date();
+        if (
+            this.currentDate.getFullYear() !== today.getFullYear() ||
+            this.currentDate.getMonth() !== today.getMonth()
+        ) return;
+
+        const dateStr = this.getLocalDateString(today);
+        const cell = this.contentContainer?.querySelector(
+            `.calendar-day[data-date="${dateStr}"]`
+        );
+        if (!(cell instanceof HTMLElement)) return;
+
+        const wordCount = this.plugin.todayWordCount;
+        const goal = Math.max(this.plugin.settings.dailyGoal, 1);
+        cell.setAttribute('data-count', String(wordCount));
+        cell.setCssProps({
+            '--calendar-progress': String(Math.min(wordCount / goal, 1)),
+            '--calendar-day-color': ColorGradient.getColor(
+                wordCount,
+                goal,
+                {
+                    empty: this.plugin.settings.emptyCellColor,
+                    level1: this.plugin.settings.level1Color,
+                    level2: this.plugin.settings.level2Color,
+                    level3: this.plugin.settings.level3Color,
+                    level4: this.plugin.settings.level4Color
+                }
+            )
+        });
+        cell.toggleClass('has-words', wordCount > 0);
+        cell.toggleClass('goal-reached', wordCount >= goal);
+        cell.setAttribute(
+            'title',
+            wordCount > 0
+                ? `${dateStr}\n码字：${wordCount.toLocaleString('zh-CN')} 字`
+                : `${dateStr}\n无码字数据`
+        );
+
+        cell.querySelector('.calendar-day-count')?.remove();
+        cell.querySelector('.calendar-day-goal')?.remove();
+        if (wordCount > 0) {
+            cell.createDiv({
+                cls: 'calendar-day-count',
+                text: wordCount.toLocaleString('zh-CN')
+            });
+            if (wordCount >= goal) {
+                cell.querySelector('.calendar-day-header')?.createSpan({
+                    cls: 'calendar-day-goal',
+                    text: '✓'
+                });
+            }
+        }
+
+        if (this.selectedCalendarDate === dateStr) {
+            this.updateSelectedDateDetail(dateStr, wordCount);
+        }
     }
 
     showFocusTab(): void {
