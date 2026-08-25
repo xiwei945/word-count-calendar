@@ -1,3 +1,8 @@
+<img width="602" height="566" alt="image" src="https://github.com/user-attachments/assets/9095f61a-6bcf-4e48-931b-8079e86088c2" />
+<img width="584" height="468" alt="image" src="https://github.com/user-attachments/assets/ad522d72-7ac5-40c5-a262-6462a76f3b01" />
+<img width="590" height="606" alt="image" src="https://github.com/user-attachments/assets/66c53a89-ac82-459f-91db-cb369594e7ef" />
+
+
 # Word Count Calendar
 
 Word Count Calendar is a local-first Obsidian plugin for visualizing daily writing progress and tracking focus time for individual notes. It never sends note content or statistics to external services.
